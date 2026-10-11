@@ -629,7 +629,7 @@
     var isDone = !!solved[b.n];
     var locked = (b.group===2 && !group1Done());
     var cls = 'vol' + (isDone?' done':'') + (locked?' locked':'');
-    var right = locked ? '<span class="lk">未开</span>' : '<span class="st">已修</span>';
+    var right = locked ? '<span class="lk">未开</span>' : (isDone ? '<span class="st">已修</span>' : '');
     return '<button class="'+cls+'" data-vol="'+b.n+'">' +
       '<span class="idx kai">'+b.idx.replace('卷','')+'</span>' +
       '<span><span class="t kai">'+b.book+'</span><span class="d">'+b.sub+'</span></span>' +
