@@ -1,6 +1,6 @@
 {
   "name": "典藏司",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "以公有领域古籍为底的单文件网页解谜文游：九卷残书，谜题从原文长出。",
   "private": true,
   "type": "module",
