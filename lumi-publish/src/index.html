@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 古籍解谜</title>
+<style>
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    --ok:#3c6b4a; --blue:#3f5a76; --gold:#8a6a34;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,.7), transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(200,180,140,.18), transparent 45%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    line-height:1.85;-webkit-font-smoothing:antialiased;font-size:15px;
+  }
+  .kai{font-family:"Kaiti SC","STKaiti","KaiTi",serif;}
+
+  #app{max-width:700px;margin:0 auto;padding:22px 18px 56px;min-height:100%;}
+  .screen{display:none;animation:fade .5s ease;}
+  .screen.active{display:block;}
+  @keyframes fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+  .brand{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line2);padding-bottom:12px;margin-bottom:24px;}
+  .brand h1{font-size:22px;letter-spacing:6px;font-weight:700;}
+  .brand .who{margin-left:auto;font-size:12px;color:var(--faint);letter-spacing:1px;}
+
+  .seal{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:34px;height:34px;border:2px solid var(--zhu);border-radius:4px;
+    color:var(--zhu);font-size:11px;line-height:1.05;font-weight:700;padding:2px;text-align:center;
+    font-family:"Kaiti SC","STKaiti",serif;transform:rotate(-3deg);
+  }
+
+  .narration{font-size:15.5px;margin:0 0 16px;}
+  .narration p{margin:0 0 12px;}
+  .speak{margin:12px 0;padding-left:14px;border-left:2px solid var(--line2);}
+  .speak .name{font-size:12.5px;color:var(--zhu);letter-spacing:1px;display:block;margin-bottom:2px;}
+
+  .leaf{
+    position:relative;background:var(--card);border:1px solid var(--line);border-radius:3px;
+    padding:22px 20px;margin:18px 0;box-shadow:0 2px 10px rgba(80,60,30,.06);
+    background-image:
+      radial-gradient(circle at 88% 12%, rgba(140,110,60,.10) 0 3px, transparent 4px),
+      radial-gradient(circle at 12% 82%, rgba(140,110,60,.09) 0 2px, transparent 3px);
+  }
+  .leaf .tag{position:absolute;top:-10px;left:16px;background:var(--ink);color:#fff;font-size:11px;padding:2px 10px;border-radius:2px;letter-spacing:2px;}
+  .classic{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:16.5px;line-height:2.1;color:#332d24;}
+  .classic .bitten{display:inline-block;min-width:1.1em;border-bottom:1.5px dashed var(--line2);color:transparent;}
+  .leaf .note{font-size:12px;color:var(--faint);margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;}
+
+  .puzzle{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:3px;padding:18px;margin:18px 0;}
+  .puzzle .q{font-size:15px;margin-bottom:14px;}
+  .puzzle .q b{color:var(--zhu);}
+
+  .inputs{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12.5px;color:var(--ink2);letter-spacing:1px;}
+  .field input{width:88px;font-size:18px;padding:8px 10px;text-align:center;background:var(--card);border:1px solid var(--line2);border-radius:3px;color:var(--ink);font-family:inherit;}
+  .field input:focus{outline:none;border-color:var(--zhu);}
+  .field .u{font-size:12px;color:var(--faint);}
+
+  .opts{display:flex;flex-direction:column;gap:9px;}
+  .opt{text-align:left;background:var(--card);border:1px solid var(--line2);border-radius:3px;padding:12px 14px;font-size:14.5px;color:var(--ink);cursor:pointer;font-family:inherit;transition:.15s;}
+  .opt:hover{border-color:var(--ink2);}
+  .opt.pick{border-color:var(--zhu);background:#fdf3ef;}
+
+  /* 爻 */
+  .yao-stack{display:flex;flex-direction:column;gap:12px;margin:6px 0 16px;align-items:center;}
+  .yao-row{display:flex;align-items:center;gap:12px;width:100%;justify-content:center;}
+  .yao-name{flex:0 0 34px;text-align:right;font-size:12px;color:var(--faint);font-family:"Kaiti SC","STKaiti",serif;}
+  .yao{position:relative;width:130px;height:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .yao .bar{background:var(--ink);height:6px;border-radius:1px;transition:.18s;}
+  .yao.yang .bar{width:130px;}
+  .yao.yin{gap:18px;display:flex;}
+  .yao.yin .bar.split{width:56px;}
+  .yao:not(.yin) .bar.split{display:none;}
+  .yao.yin .bar.solid{display:none;}
+
+  /* 配对 */
+  .match-wrap{display:flex;gap:12px;margin:4px 0 16px;}
+  .mcol{flex:1;display:flex;flex-direction:column;gap:9px;}
+  .mitem{
+    background:var(--card);border:1px solid var(--line2);border-radius:3px;
+    padding:10px 12px;font-size:13.5px;cursor:pointer;transition:.15s;position:relative;
+    line-height:1.6;
+  }
+  .mitem:hover{border-color:var(--ink2);}
+  .mitem.sel{border-color:var(--zhu);background:#fdf3ef;}
+  .mitem.paired{border-color:var(--ok);background:rgba(60,107,74,.07);}
+  .mitem .num{
+    position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;
+    background:var(--ok);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;
+  }
+
+  /* 排序 */
+  .sortlist{display:flex;flex-direction:column;gap:8px;margin:4px 0 16px;}
+  .sitem{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line2);border-radius:3px;padding:10px 12px;}
+  .sitem .txt{flex:1;font-size:13.5px;line-height:1.6;}
+  .sitem .mv{
+    flex:0 0 32px;height:32px;border:1px solid var(--line2);background:var(--paper);border-radius:3px;
+    cursor:pointer;color:var(--ink2);font-size:15px;font-family:inherit;
+  }
+  .sitem .mv:disabled{opacity:.25;cursor:default;}
+  .sitem .mv:hover:not(:disabled){border-color:var(--ink);color:var(--ink);}
+
+  .btn{display:inline-block;background:var(--ink);color:var(--paper);border:none;border-radius:3px;padding:11px 24px;font-size:14.5px;letter-spacing:2px;cursor:pointer;font-family:inherit;transition:.18s;}
+  .btn:hover{background:#000;}
+  .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line2);}
+  .btn.ghost:hover{background:rgba(0,0,0,.03);color:var(--ink);}
+  .btn.zhu{background:var(--zhu);}
+  .btn.zhu:hover{background:#8f2f22;}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;}
+
+  .hints{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;}
+  .hint{font-size:13.5px;color:var(--ink2);background:rgba(166,58,42,.05);border-left:2px solid var(--zhu);padding:9px 12px;margin-top:8px;border-radius:2px;}
+  .hint .name{color:var(--zhu);font-size:12px;letter-spacing:1px;display:block;}
+
+  .fb{margin-top:12px;font-size:14px;padding:10px 12px;border-radius:3px;display:none;}
+  .fb.show{display:block;animation:fade .35s ease;}
+  .fb.wrong{background:rgba(166,58,42,.08);border-left:3px solid var(--zhu);color:#7d2a1e;}
+  .fb.right{background:rgba(60,107,74,.09);border-left:3px solid var(--ok);color:#2c5239;}
+
+  /* 书库 */
+  .shelf{display:flex;flex-direction:column;gap:12px;margin-top:8px;}
+  .shelf-title{font-size:13px;color:var(--faint);letter-spacing:3px;margin:18px 0 2px;}
+  .vol{display:flex;gap:14px;align-items:center;text-align:left;width:100%;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:3px;padding:14px 16px;cursor:pointer;font-family:inherit;color:var(--ink);transition:.18s;}
+  .vol:hover{border-left-color:var(--ink);transform:translateX(2px);}
+  .vol.done{border-left-color:var(--zhu);}
+  .vol.locked{opacity:.5;cursor:default;}
+  .vol.locked:hover{transform:none;border-left-color:var(--line2);}
+  .vol .idx{font-size:19px;color:var(--faint);font-family:"Kaiti SC","STKaiti",serif;flex:0 0 34px;}
+  .vol .t{font-size:16px;font-weight:700;letter-spacing:1px;}
+  .vol .d{font-size:12.5px;color:var(--faint);margin-top:2px;}
+  .vol .st{margin-left:auto;font-size:11.5px;color:var(--zhu);border:1px solid var(--zhu);padding:1px 7px;border-radius:2px;opacity:0;}
+  .vol.done .st{opacity:1;}
+  .vol .lk{margin-left:auto;font-size:12px;color:var(--faint);}
+
+  .progress{font-size:12.5px;color:var(--ink2);letter-spacing:1px;margin-top:14px;}
+  hr.sep{border:none;border-top:1px dashed var(--line);margin:24px 0;}
+
+  /* 书页卡 */
+  .card-page{background:var(--card);border:1px solid var(--line2);border-radius:4px;padding:24px 22px;margin:16px 0;position:relative;box-shadow:0 3px 14px rgba(80,60,30,.08);}
+  .card-page .stamp{position:absolute;top:14px;right:14px;}
+  .card-page h3{font-size:19px;letter-spacing:3px;margin-bottom:2px;}
+  .card-page .meta{font-size:12px;color:var(--faint);letter-spacing:1px;margin-bottom:14px;}
+  .card-page .quote{font-family:"Kaiti SC","STKaiti",serif;font-size:15.5px;line-height:1.95;color:#332d24;background:rgba(166,58,42,.045);border-left:3px solid var(--zhu);padding:12px 14px;border-radius:2px;margin-bottom:14px;}
+  .card-page .plain{font-size:14.5px;}
+  .card-page .plain b{color:var(--zhu);}
+  .card-page .pnote{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:13.5px;color:var(--ink2);}
+  .card-page .pnote .name{color:var(--zhu);font-size:12px;letter-spacing:1px;}
+
+  /* 藏书阁 */
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px;}
+  .slot{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:14px 8px;text-align:center;min-height:90px;display:flex;flex-direction:column;justify-content:center;gap:4px;}
+  .slot.filled{border-color:var(--zhu);}
+  .slot .bname{font-size:13.5px;letter-spacing:1px;font-family:"Kaiti SC","STKaiti",serif;}
+  .slot .bdyn{font-size:11px;color:var(--faint);}
+  .slot .empty{font-size:12px;color:var(--faint);}
+
+  .ending{border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);padding:22px 4px;}
+  .ending .sign{text-align:right;font-size:12.5px;color:var(--faint);margin-top:16px;letter-spacing:2px;}
+
+  .mini-note{font-size:12px;color:var(--faint);margin-top:8px;}
+
+  @media(max-width:420px){
+    #app{padding:16px 14px 46px;}
+    .brand h1{font-size:19px;letter-spacing:4px;}
+    .yao{width:104px;} .yao.yang .bar{width:104px;} .yao.yin .bar.split{width:44px;} .yao.yin{gap:14px;}
+    .field input{width:76px;}
+    .match-wrap{gap:8px;} .mitem{padding:9px 10px;font-size:12.5px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 开场 -->
+  <section class="screen active" id="s-intro">
+    <div class="brand"><h1>典藏司</h1><span class="who">古籍解谜</span></div>
+    <div class="narration">
+      <p>入司那日，天阴着。</p>
+      <p>城南旧藏书楼，推门是一股陈年纸墨的气味。老掌书没让你坐，只递来一盏灯、一把镊子。</p>
+      <p>他姓沈，单名一个砚字。手上有常年翻书磨出来的厚茧。</p>
+      <div class="speak"><span class="name kai">沈砚</span>书不会说话。但它会考你。</div>
+      <p>你接过灯。案上摊着三卷残书，被蠹虫蛀了一夜。</p>
+    </div>
+    <div class="actions"><button class="btn" data-go="s-desk">进书库</button></div>
+  </section>
+
+  <!-- 书库 -->
+  <section class="screen" id="s-desk">
+    <div class="brand"><h1>书库</h1><span class="who">九卷</span></div>
+    <div class="narration"><p>蠹虫蛀的，都是最要紧的地方。修好一卷，才算入得了门。</p></div>
+    <div id="shelf-host"></div>
+    <div class="progress" id="desk-progress"></div>
+    <hr class="sep">
+    <div class="actions">
+      <button class="btn ghost" data-go="s-gallery">藏书阁</button>
+      <button class="btn ghost" id="btn-ending" data-go="s-ending">交卷</button>
+    </div>
+    <div class="mini-note" id="desk-hint-tip">九卷修全，才能交卷。</div>
+  </section>
+
+  <!-- 关卡（动态） -->
+  <section class="screen" id="s-level">
+    <div class="brand"><h1 id="lv-title">—</h1><span class="who kai" id="lv-idx">—</span></div>
+    <div id="lv-body"></div>
+    <div class="actions"><button class="btn ghost" data-go="s-desk">回书库</button></div>
+  </section>
+
+  <!-- 书页卡（动态） -->
+  <section class="screen" id="s-card">
+    <div class="brand"><h1>补全</h1><span class="who kai">书页卡</span></div>
+    <div id="card-host"></div>
+    <div class="actions">
+      <button class="btn" data-go="s-gallery">收进藏书阁</button>
+      <button class="btn ghost" data-go="s-desk">回书库</button>
+    </div>
+  </section>
+
+  <!-- 幕间：樟木箱 -->
+  <section class="screen" id="s-interlude">
+    <div class="brand"><h1>樟木箱</h1><span class="who kai">幕间</span></div>
+    <div class="narration">
+      <p>三卷修完，你直起腰。</p>
+      <p>阿棠不知什么时候蹲在书库最里头，冲你招手。</p>
+      <div class="speak"><span class="name kai">阿棠</span>过来看。</div>
+      <p>她掀开一口樟木箱的盖子。里面整整齐齐码着六卷书，纸都黄透了，霉味混着樟脑味涌出来。</p>
+      <div class="speak"><span class="name kai">阿棠</span>老掌书说，你那三卷是入门考。这箱子里的，才是正经难题。</div>
+      <div class="speak"><span class="name kai">沈砚</span>（在你身后）箱子上的锁，是给还没入门的人看的。</div>
+      <div class="speak"><span class="name kai">沈砚</span>现在，你可以打开了。</div>
+    </div>
+    <div class="actions"><button class="btn zhu" data-go="s-desk">打开樟木箱</button></div>
+  </section>
+
+  <!-- 藏书阁 -->
+  <section class="screen" id="s-gallery">
+    <div class="brand"><h1>藏书阁</h1><span class="who">你救回的书</span></div>
+    <div class="narration"><p>每修好一卷，就有一页归位。</p></div>
+    <div class="gallery" id="gallery-grid"></div>
+    <div class="progress" id="gal-progress"></div>
+    <hr class="sep">
+    <div class="actions">
+      <button class="btn ghost" data-go="s-desk">回书库</button>
+      <button class="btn" id="btn-ending2" data-go="s-ending">交卷</button>
+    </div>
+  </section>
+
+  <!-- 结局 -->
+  <section class="screen" id="s-ending">
+    <div class="brand"><h1>归位</h1><span class="who kai">结局</span></div>
+    <div class="narration">
+      <p>九卷修完，天光大亮。</p>
+      <p>你把补好的书页按顺序码好，捧到老掌书面前。</p>
+      <p>他没夸你。只是翻到《周易》那一页，指着一行字给你看——</p>
+    </div>
+    <div class="leaf" style="text-align:center;">
+      <div class="classic" style="font-size:20px;letter-spacing:6px;">拔茅茹，以其汇</div>
+      <div class="note" style="text-align:left;">初九。拔茅草，要连着根一起拔。读书，也要连着读。</div>
+    </div>
+    <div class="narration">
+      <div class="speak"><span class="name kai">沈砚</span>这些书，从今天起，归你管了。</div>
+      <p>灯芯爆了一下。</p>
+      <p>你第一次觉得，纸上的这些字，是活的。</p>
+    </div>
+    <div class="ending">
+      <div class="narration" style="margin:0;">
+        <p style="font-size:13px;color:var(--ink2);">
+          本作取材于公有领域古籍，原文取自本地古籍档案 guji-archive（殆知阁公有领域文本）：<br>
+          《孙子算经》《九章算术》《周易》《考工记》《营造法式》<br>
+          《洗冤集录》《棠阴比事》《山海经》《天工开物》
+        </p>
+      </div>
+      <div class="sign">—— 典藏司 · 校书郎</div>
+    </div>
+    <div class="actions" style="margin-top:18px;">
+      <button class="btn ghost" data-go="s-gallery">再看藏书阁</button>
+      <button class="btn ghost" data-go="s-desk">回书库</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     关卡数据（九卷）
+     group: 1 = 案上三卷（入门）；2 = 樟木箱六卷
+     puzzle.type: input | choice | toggle | match | sort
+     ============================================================ */
+  var BOOKS = [
+    /* ---------- 卷一 · 孙子算经 ---------- */
+    {
+      n:1, group:1, book:'孙子算经', sub:'雉兔同笼', idx:'卷一', dyn:'魏晋', meta:'子藏 · 算法',
+      scene:[
+        {t:'p', v:'案上第一卷，封皮已经脆了。'},
+        {t:'p', v:'阿棠凑过来看了一眼。她比你早入司两年，抄书快，嘴也快。'},
+        {t:'say', name:'阿棠', v:'这不就是数鸡数兔子嘛。'},
+        {t:'say', name:'沈砚', v:'（没抬头）你数数看。'}
+      ],
+      leaf:{tag:'残页', text:'今有雉、兔同笼，上有三十五头，下有九十四足。<br>问：雉、兔各几何？答曰：雉<span class="bitten">□</span>、兔<span class="bitten">□</span>。',
+            note:'题面还看得清，答案那两个数被蠹虫蛀掉了——得你自己算。'},
+      puzzle:{type:'input', q:'笼里共 <b>35</b> 个头、<b>94</b> 只脚。雉两条腿，兔四条腿。<br>各几只？',
+              fields:[{k:'a',label:'雉',unit:'只'},{k:'b',label:'兔',unit:'只'}],
+              answer:{a:23,b:12},
+              right:'你填上"雉二十三、兔一十二"。<br>原文末行露了出来——"答曰：雉二十三，兔一十二。"一字不差。',
+              wrong:function(d){
+                return '笼里得是 35 个头、94 只脚。<br>你填的是 '+d.heads+' 个头、'+d.legs+' 只脚。再想想。';
+              }},
+      hints:[
+        {name:'沈砚', v:'先假令全是雉。三十五只雉，该有多少只脚？'},
+        {name:'沈砚', v:'九十四减七十，得二十四。每多一只兔，就多两只脚。二十四里有多少个二？'},
+        {name:'沈砚', v:'（把书推到你面前）二十四除二，是兔的只数。剩下的，自己数。'}
+      ],
+      card:{quote:'今有雉、兔同笼，上有三十五头，下有九十四足。问：雉、兔各几何？答曰：雉二十三，兔一十二。',
+        plain:'这就是"鸡兔同笼"。后来数学课本里的老题目，最早就在这本书里。<b>三十五头、九十四足——雉二十三只，兔一十二只。</b>',
+        p:'算得准，不算本事。知道该算什么，才是。'}
+    },
+
+    /* ---------- 卷二 · 九章算术 ---------- */
+    {
+      n:2, group:1, book:'九章算术', sub:'引葭赴岸', idx:'卷二', dyn:'汉', meta:'子藏 · 算法',
+      scene:[
+        {t:'p', v:'第二卷翻开，是《九章算术》。'},
+        {t:'say', name:'阿棠', v:'这本比刚才那本还老。题目全是田啊、粮啊、池子啊。'},
+        {t:'p', v:'你翻到"勾股"一章。一页上画着个方池，池子正中长着一根芦苇。'}
+      ],
+      leaf:{tag:'残页', text:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。<br>问：水深、葭长各几何？',
+            note:'答数被蛀了。池子边长"一丈"，就是十尺。'},
+      puzzle:{type:'input', q:'池子边长 <b>10</b> 尺，正中间长着一根芦苇，露出水面 <b>1</b> 尺。<br>把它拉向岸边，顶端刚好碰到岸。<br>水深、葭长各多少尺？',
+              fields:[{k:'a',label:'水深',unit:'尺'},{k:'b',label:'葭长',unit:'尺'}],
+              answer:{a:12,b:13},
+              right:'你填上"水深一丈二尺、葭长一丈三尺"。<br>苇尖触岸的那一瞬，水下与水上的长度，忽然成了一个直角三角——原来《九章》里的"勾股"，就是这么量出来的。',
+              wrong:function(d){
+                return '水深、半池、葭长，要正好凑成一个直角三角形。<br>你填的是 水深 '+d.a+' 尺、葭长 '+d.b+' 尺。再想想。';
+              }},
+      hints:[
+        {name:'沈砚', v:'池子边长十尺。一半是多少？'},
+        {name:'沈砚', v:'芦苇拉到岸边时，水深、半池、芦苇这三条，正好围成一个直角三角形。'},
+        {name:'沈砚', v:'术曰"半池方自乘"——五五二十五。芦苇比水深长一尺。二十五减一，再除以二。'}
+      ],
+      card:{quote:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。问：水深、葭长各几何？答曰：水深一丈二尺，葭长一丈三尺。',
+        plain:'半池是五尺。把芦苇拉倒，水深、半池、芦苇正好凑成一个直角三角形——这就是"勾股"。<b>水深十二尺，芦苇十三尺</b>，差的那一尺，就是露出水面的部分。',
+        p:'芦苇量不出水深。得把它拉倒，借一个直角。'}
+    },
+
+    /* ---------- 卷三 · 周易 ---------- */
+    {
+      n:3, group:1, book:'周易', sub:'天地交而万物通', idx:'卷三', dyn:'先秦', meta:'易藏 · 易经',
+      scene:[
+        {t:'p', v:'第三卷散成一片一片的竹简，六画错乱，拼不回去了。'},
+        {t:'say', name:'沈砚', v:'天上地下，本是常理。可这一卦偏偏反着来——地在上，天在下。天地才交得起来。'},
+        {t:'say', name:'沈砚', v:'你把它拼出来。'}
+      ],
+      leaf:{tag:'散简', text:'11. 泰（卦十一）<br>《泰》：小往大来，吉，亨。<br>《彖》曰："泰，小往大来。"则是天地交而万物通也……',
+            note:'简上只剩卦辞，六画散乱。'},
+      puzzle:{type:'toggle', q:'一卦自下而上六画。点亮每一画：<b>阳</b>是一整条，<b>阴</b>是断开的两段。<br>拼出这一卦——地在上，天在下。',
+              answer:[true,true,true,false,false,false], // 自下而上：初 二 三 四 五 上
+              right:'六画拼齐，纸上浮出"泰"字。<br>初九、九二、九三——三条阳爻，是<b>乾</b>，是天。<br>六四、六五、上六——三条阴爻，是<b>坤</b>，是地。<br>乾在下，坤在上。天在下头，地在上头。<br>天地交，就通了。',
+              wrong:'再数数。下卦三条要是"天"，上卦三条要是"地"。天是阳，地是阴。'},
+      hints:[
+        {name:'沈砚', v:'乾，是三画全阳的天。坤，是三画全阴的地。'},
+        {name:'沈砚', v:'初、二、三是下卦，四、五、上是上卦。要让地在上面——上三画全阴；天在下面——下三画全阳。'},
+        {name:'沈砚', v:'照着爻辞对：初九、九二、九三，然后六四、六五、上六。'}
+      ],
+      card:{quote:'泰（卦十一）（乾下坤上）　《泰》：小往大来，吉，亨。',
+        plain:'泰卦是"天在下、地在上"。看着别扭，其实是天地要交会——<b>位置反着放，反而通了。</b>六十四卦，说到底就是六条阴爻阳爻的所有排法，一共六十四种。',
+        p:'位置颠倒，未必是坏事。'}
+    },
+
+    /* ---------- 卷四 · 考工记 ---------- */
+    {
+      n:4, group:2, book:'考工记', sub:'三材各司其职', idx:'卷四', dyn:'先秦', meta:'儒藏 · 礼经',
+      scene:[
+        {t:'p', v:'樟木箱里第一本，封皮上写着《考工记》。'},
+        {t:'say', name:'阿棠', v:'讲造车的。古籍里头，怎么还夹着本手艺书？'},
+        {t:'say', name:'沈砚', v:'天下的活计，道理是通的。你先看它怎么造一个轮子。'}
+      ],
+      leaf:{tag:'残页', text:'斩三材必以其时。三材既具，巧者和之。<br>毂也者，以为利转也；辐也者，以为直指也；牙也者，以为固抱也。<br>轮敝，三材不失职，谓之完。',
+            note:'三材的名称都还在，只是各自的用处，得你自己对上。'},
+      puzzle:{type:'match', q:'一个轮子有三样材。<br>把每一样，配上它干的活。',
+              left:[{id:'gu',t:'毂'},{id:'fu',t:'辐'},{id:'ya',t:'牙'}],
+              right:[
+                {id:'gu',t:'套在轴上，让轮子顺顺当当地转'},
+                {id:'fu',t:'一根根直着往外撑，一直撑到外圈'},
+                {id:'ya',t:'最外面那一圈，把整个轮子箍住'}
+              ],
+              right_msg:'一毂、一辐、一牙，各归各位。<br>老掌书说得对——三样东西，各管一段，轮子才立得住。',
+              wrong_msg:'再对一对。照原文的顺序看：毂管转，辐管撑，牙管箍。'},
+      hints:[
+        {name:'沈砚', v:'毂，是轮子最里头、套着轴的那块圆木。'},
+        {name:'沈砚', v:'辐，是从毂往外，一根根直着撑到外圈的木条。'},
+        {name:'沈砚', v:'牙，就是最外头那一圈。毂管转，辐管撑，牙管箍。'}
+      ],
+      card:{quote:'毂也者，以为利转也；辐也者，以为直指也；牙也者，以为固抱也。',
+        plain:'一个轮子三样东西：<b>毂</b>在最里头，套着轴管转；<b>辐</b>在中间，一根根直着撑开；<b>牙</b>在最外头，是一圈箍。三样各干各的活，谁不失职，轮子就算旧了，也还是好轮子。',
+        p:'三样东西，各管一段。谁也别抢谁的活。'}
+    },
+
+    /* ---------- 卷五 · 营造法式 ---------- */
+    {
+      n:5, group:2, book:'营造法式', sub:'材有八等', idx:'卷五', dyn:'宋', meta:'史藏 · 政书',
+      scene:[
+        {t:'p', v:'阿棠从箱底拖出一个布包，解开，是几张图纸，边角已经脆了。'},
+        {t:'say', name:'阿棠', v:'《营造法式》，修宫殿的。全是数字，我看不懂。'},
+        {t:'say', name:'沈砚', v:'不是数字，是规矩。多大的屋子，用多大的材。你往下读。'}
+      ],
+      leaf:{tag:'残页', text:'凡构屋之制，皆以材为祖。材有八等，度屋之大小，因而用之。<br>第一等　广九寸、厚六寸<br>第二等　广八寸二分五厘、厚五寸五分　右殿身五间至七间则用之。<br>第三等　广七寸五分、厚五寸　　右殿身三间至殿五间，或堂七间则用之。',
+            note:'每一等材，配一种规模的屋子。配错了，是要塌的。'},
+      puzzle:{type:'choice', q:'眼下要盖一座 <b>殿身七间</b> 的殿。<br>照《营造法式》，该用第几等材？',
+              opts:[
+                {k:'A',t:'第一等——广九寸、厚六寸'},
+                {k:'B',t:'第二等——广八寸二分五厘、厚五寸五分'},
+                {k:'C',t:'第三等——广七寸五分、厚五寸'},
+                {k:'D',t:'第八等——广四寸五分、厚三寸'}
+              ],
+              answer:'B',
+              right:'你把"殿身七间"四个字，对到"第二等"那一行下面。<br>严丝合缝。<br>规矩不是拿来背的，是拿来对的。',
+              wrong:{
+                A:'第一等底下写的是"殿身九间至十一间"。七间，还够不上。',
+                B:'',
+                C:'第三等底下是"殿身三间至殿五间"。七间的殿，比它大。',
+                D:'第八等是给"殿内藻井或小亭榭"用的，太小了。'
+              }},
+      hints:[
+        {name:'沈砚', v:'先找到原文里写"间数"的那几行。'},
+        {name:'沈砚', v:'第二等下面写着"殿身五间至七间"。七间，正好在里面。'},
+        {name:'沈砚', v:'第一等管九到十一间，第二等管五到七间。七间，归第二等。'}
+      ],
+      card:{quote:'凡构屋之制，皆以材为祖。材有八等，度屋之大小，因而用之。',
+        plain:'盖房子先定"材"。材分八等，殿越大，用材越大：九到十一间的殿用第一等，五到七间用第二等，三到五间用第三等。<b>规矩写死在书里，谁也不能乱来</b>——这就是宋代的建筑标准。',
+        p:'多大的屋子，用多大的材。这是规矩，不是将就。'}
+    },
+
+    /* ---------- 卷六 · 洗冤集录 ---------- */
+    {
+      n:6, group:2, book:'洗冤集录', sub:'头紧抵绳结', idx:'卷六', dyn:'宋', meta:'医藏 · 宋慈 撰',
+      scene:[
+        {t:'p', v:'这一卷刚翻开，门就被推开了。阿棠把一张验状拍在你案上，纸角还沾着露水。'},
+        {t:'say', name:'阿棠', v:'城南出了个案子。仵作说是自缢。可我瞧着，不太对。'},
+        {t:'p', v:'验状上写着——'}
+      ],
+      leaf:{tag:'验状', text:'死者悬于梁下，脚下木凳倒在一旁。<br>梁上系绳处甚高，踮足、踏凳亦难够着。<br><b>其头紧抵上面绳结，几无缝隙。</b>',
+            note:'仵作判"自缢"。你翻着《洗冤集录》，觉得该再细一层。'},
+      puzzle:{type:'choice', q:'这一桩，究竟是什么？',
+              opts:[
+                {k:'A',t:'自缢。绳索高、凳子倒，都是自尽的常见情形。'},
+                {k:'B',t:'被人勒死后，吊上去的。头紧抵绳结，是破绽。'},
+                {k:'C',t:'意外摔落致死，与绳索无关。'}
+              ],
+              answer:'B',
+              right:'你把《洗冤集录》翻到"自缢"一条——<br>"自缢身死者……喉下痕紫赤色……横长九寸以上至一尺以来。"<br>自缢的绳痕，是横的、匀的、绕到耳后的。可这一具，头紧抵着绳结。<br>"若是头紧抵上头，定是别人吊起。"老掌书不知什么时候站在你身后。<br>"你不只要跟他一样看，"他说，"要看得比他细。"',
+              wrong:{
+                A:'自缢的人，身体往下坠，头和上面绳结之间会留出一尺来空。<br>可这一具，头紧紧抵着绳结，一点缝都没有。再翻翻书。',
+                B:'',
+                C:'她是悬在梁下的，脖子上有绳痕。摔落之说，对不上。'
+              }},
+      hints:[
+        {name:'洗冤集录', v:'自缢身死者……喉下痕紫赤色……横长九寸以上至一尺以来。'},
+        {name:'洗冤集录', v:'上面系绳头处，或高、或大，手不能攀，及不能上，则是别人吊起……'},
+        {name:'洗冤集录', v:'若是头紧抵上头，定是别人吊起。'}
+      ],
+      card:{quote:'若是头紧抵上头，定是别人吊起。',
+        plain:'自缢的人，身体往下坠，头和绳结之间总留着一尺来空。可要是<b>头紧紧抵着绳结</b>，那就说明——有人在人死之后，把他吊了上去。<br>这是书里最简单，也最管用的一条。',
+        p:'看得比他细，就够了吗？还不够。得看得准。'}
+    },
+
+    /* ---------- 卷七 · 棠阴比事 ---------- */
+    {
+      n:7, group:2, book:'棠阴比事', sub:'额上巾痕', idx:'卷七', dyn:'宋', meta:'子藏 · 法家',
+      scene:[
+        {t:'p', v:'阿棠抽出一卷，在手上掂了掂。'},
+        {t:'say', name:'阿棠', v:'这本有意思，《棠阴比事》，全是断案的故事。'},
+        {t:'say', name:'沈砚', v:'断案看的不是热闹。你看他，从哪儿下手。'},
+        {t:'p', v:'你翻开，第一页就写着张尚书的事。'}
+      ],
+      leaf:{tag:'残页', text:'张尚书知江宁，有僧呈牒给凭，公据案熟视久之，判司理院勘杀人贼。<br>郡寮不晓其故，公乃召僧问披剃几年，对曰："七年。"<br>又曰："何故额有巾痕？"即首伏。<br>乃一民与僧同行道中，杀之，以其度牒自剃为僧。',
+            note:'同僚都想不通：张尚书凭什么一眼就认定，这僧人是假的？'},
+      puzzle:{type:'choice', q:'张尚书"据案熟视久之"，看的是哪里？',
+              opts:[
+                {k:'A',t:'看他递上的度牒——纸色和印信不对。'},
+                {k:'B',t:'看他的额头——上面有一道戴头巾压出来的痕。'},
+                {k:'C',t:'听他的口音——不是江宁本地人。'},
+                {k:'D',t:'看他的僧袍——衣裳太新，不合规制。'}
+              ],
+              answer:'B',
+              right:'"何故额有巾痕？"<br>这一句问出口，那人当场就伏了。<br>原来他杀了一个和尚，抢了度牒，自己剃了头冒充。可剃头才几天——<b>额上还留着常年戴头巾压出的印子</b>。<br>真出家七年的人，额上不会有这道痕。',
+              wrong:{
+                A:'度牒是真的——那是他从被杀的真和尚身上夺来的。问题不在牒上。',
+                B:'',
+                C:'原文没提口音。张尚书看的是人本身，不是他的话。',
+                D:'僧袍新旧，原文也只字未提。'
+              }},
+      hints:[
+        {name:'沈砚', v:'原文里，张尚书"据案熟视久之"——他在看这个人的脸。'},
+        {name:'沈砚', v:'他问的是"披剃几年"，答"七年"。出家人七年，头上该是什么样？'},
+        {name:'沈砚', v:'"何故额有巾痕？"——刚剃的头，才留着戴头巾的压痕。'}
+      ],
+      card:{quote:'又曰："何故额有巾痕？"即首伏。',
+        plain:'这人杀了和尚、抢了度牒、自己剃头冒充。可剃头才几天，<b>额上还留着戴头巾压出来的印子</b>。张尚书一眼看出来——真出家七年的人，额上不会有这道痕。',
+        p:'问他七年，不是要他的答案。是要他露出破绽。'}
+    },
+
+    /* ---------- 卷八 · 山海经 ---------- */
+    {
+      n:8, group:2, book:'山海经', sub:'其状如其名', idx:'卷八', dyn:'先秦', meta:'史藏 · 志存记录',
+      scene:[
+        {t:'p', v:'箱里最后一本薄薄的，封皮上没有书名，只在角上画着一只兽。'},
+        {t:'say', name:'阿棠', v:'这是《山海经》？画的全是些怪东西。'},
+        {t:'say', name:'沈砚', v:'怪，是因为你没见过。古人写一只兽，写三样：像什么、叫什么、有什么用。'},
+        {t:'say', name:'沈砚', v:'你把它们对上。'}
+      ],
+      leaf:{tag:'残页', text:'南山经之首曰鹊山。其首曰招摇之山，临于西海之上，多桂，多金玉。<br>有草焉，其状如韭而青华，其名曰祝余，食之不饥。<br>有木焉，其状如谷而黑理，其华四照，其名曰迷谷，佩之不迷。',
+            note:'这是书的开头。再往后翻，一页上画了四只兽，名字却都被虫蛀了。'},
+      puzzle:{type:'match', q:'四段描述，四只兽。名字被蛀掉了。<br>照《山海经》的写法，把它们对回去。',
+              left:[{id:'feng',t:'凤凰'},{id:'xuan',t:'旋龟'},{id:'lu',t:'鹿蜀'},{id:'gu',t:'蛊雕'}],
+              right:[
+                {id:'feng',t:'其状如鸡，五采而文……见则天下安宁'},
+                {id:'xuan',t:'其状如龟而鸟首虺尾，其音如判木，佩之不聋'},
+                {id:'lu',t:'其状如马而白首，其文如虎，而赤尾，其音如谣'},
+                {id:'gu',t:'其状如雕而有角，其音如婴儿之音，是食人'}
+              ],
+              right_msg:'四只兽，各归其名。<br>它们的名字，从来不是随手起的——像什么，就叫什么。',
+              wrong_msg:'再对一对。看"其状如……"后面跟着的是哪一种活物。'},
+      hints:[
+        {name:'沈砚', v:'"其状如鸡"——像鸡的，是凤凰。'},
+        {name:'沈砚', v:'"其状如龟而鸟首虺尾"，龟身、鸟头、蛇尾——这才叫旋龟。'},
+        {name:'沈砚', v:'马身白首、虎纹赤尾，是鹿蜀；雕身有角、声如婴儿，是蛊雕。'}
+      ],
+      card:{quote:'有鸟焉，其状如鸡，五采而文，名曰凤凰……见则天下安宁。',
+        plain:'古人写一只兽，写三件事：<b>像什么、叫什么、有什么用</b>。凤凰像鸡、五彩，见了天下太平；旋龟是龟身鸟头蛇尾，佩在身上耳朵不聋。这不是编故事，是当时人记山野鸟兽的法子。',
+        p:'古人记一只兽，记的是它的用处，不只是它的样子。'}
+    },
+
+    /* ---------- 卷九 · 天工开物 ---------- */
+    {
+      n:9, group:2, book:'天工开物', sub:'造纸九步', idx:'卷九', dyn:'明', meta:'子藏 · 农家',
+      scene:[
+        {t:'p', v:'最后一卷，纸比别的都新，像是后来补抄的。'},
+        {t:'say', name:'阿棠', v:'《天工开物》，宋应星写的。这本我熟——我爹就是造纸的。'},
+        {t:'say', name:'沈砚', v:'那你说说，一张纸，要过几道手？'},
+        {t:'say', name:'阿棠', v:'……我还是别说了。'}
+      ],
+      leaf:{tag:'残页', text:'凡造竹纸，事出南方，而闽省独专其盛。<br>当笋生之后……节界芒种，则登山斫伐。截断五七尺长，就于本山开塘一口，注水其中漂浸。<br>浸至百日之外，加功槌洗，洗去粗壳与青皮，是名杀青。<br>用上好石灰化汁涂浆，入桶下煮，火以八日八夜为率。',
+            note:'工序记了满满一页，可惜散开了——得按造法重排。'},
+      puzzle:{type:'sort', q:'造一张竹纸，要过这么几道手。<br>按先后排好。',
+              items:[
+                {id:'chao',t:'抄帘荡料，覆帘落纸成张'},
+                {id:'jin',t:'芒种斫竹，截段入塘，漂浸百日'},
+                {id:'sha',t:'槌洗去粗壳与青皮——"杀青"'},
+                {id:'chong',t:'舂捣成泥，倾入抄纸槽'},
+                {id:'zhu',t:'石灰化汁涂浆，入桶下煮，八日八夜'}
+              ],
+              answer:['jin','sha','zhu','chong','chao'],
+              right:'斫竹漂浸，杀青去皮，石灰浆煮，舂捣成泥，最后抄帘成张。<br>一道都不能少，一道都不能倒。<br>你写字的那张纸，背后是十几道手。',
+              wrong_msg:'顺序反了。先有竹子，才有纸——从砍竹那一头想起。'},
+      hints:[
+        {name:'沈砚', v:'先砍竹。芒种前后上山斫伐，截断了泡在水塘里。'},
+        {name:'沈砚', v:'泡满百日，槌洗去皮，这道叫"杀青"。杀青之后，才轮到石灰浆煮。'},
+        {name:'沈砚', v:'煮足八日八夜，竹麻烂了，舂成泥，才能抄帘成纸。'}
+      ],
+      card:{quote:'浸至百日之外，加功槌洗，洗去粗壳与青皮，是名杀青。',
+        plain:'造一张竹纸，先把竹子砍下浸上百日，槌洗去皮（这道叫"<b>杀青</b>"），再用石灰浆煮上八天八夜，舂成泥，才轮到抄帘成张。<b>你写字的这张纸，背后是十几道手。</b>',
+        p:'你写的字，轻。可它不便宜。'}
+    }
+  ];
+
+  var byN = {};
+  BOOKS.forEach(function(b){ byN[b.n] = b; });
+
+  /* ============================================================
+     状态
+     ============================================================ */
+  var solved = {};          // n -> true
+  var interludeSeen = false;
+  var pendingInterlude = false;
+
+  function solvedCount(){ var c=0; for(var k in solved){ if(solved[k]) c++; } return c; }
+  function group1Done(){ return solved[1]&&solved[2]&&solved[3]; }
+  function allDone(){ return solvedCount()===9; }
+
+  /* ============================================================
+     屏幕切换
+     ============================================================ */
+  function show(id){
+    var list = document.querySelectorAll('.screen');
+    for(var i=0;i<list.length;i++){ list[i].classList.remove('active'); }
+    var el = document.getElementById(id);
+    if(el){ el.classList.add('active'); window.scrollTo(0,0); }
+    if(id==='s-desk'){ renderDesk(); }
+    if(id==='s-gallery'){ renderGallery(); }
+  }
+
+  document.addEventListener('click', function(e){
+    var t = e.target.closest('[data-go]');
+    if(!t) return;
+    var dest = t.getAttribute('data-go');
+
+    // 回书库时，若刚到第二幕，先播幕间
+    if(dest==='s-desk' && pendingInterlude && !interludeSeen){
+      interludeSeen = true; pendingInterlude = false;
+      show('s-interlude');
+      return;
+    }
+    // 未修全时不能交卷
+    if(dest==='s-ending' && !allDone()){
+      alert('九卷还没修全。先去书库，把没修完的补上。');
+      return;
+    }
+    show(dest);
+  });
+
+  /* ============================================================
+     书库
+     ============================================================ */
+  function volHTML(b, unlocked){
+    var isDone = !!solved[b.n];
+    var locked = (b.group===2 && !group1Done());
+    var cls = 'vol' + (isDone?' done':'') + (locked?' locked':'');
+    var right = locked ? '<span class="lk">未开</span>' : '<span class="st">已修</span>';
+    return '<button class="'+cls+'" data-vol="'+b.n+'">' +
+      '<span class="idx kai">'+b.idx.replace('卷','')+'</span>' +
+      '<span><span class="t kai">'+b.book+'</span><span class="d">'+b.sub+'</span></span>' +
+      right + '</button>';
+  }
+
+  function renderDesk(){
+    var host = document.getElementById('shelf-host');
+    if(!host) return;
+    var g1 = BOOKS.filter(function(b){return b.group===1;});
+    var g2 = BOOKS.filter(function(b){return b.group===2;});
+    var h = '<div class="shelf-title">案上三卷</div><div class="shelf">';
+    g1.forEach(function(b){ h += volHTML(b); });
+    h += '</div><div class="shelf-title">樟木箱'+(group1Done()?'':' · 锁着')+'</div><div class="shelf">';
+    g2.forEach(function(b){ h += volHTML(b); });
+    h += '</div>';
+    host.innerHTML = h;
+
+    document.getElementById('desk-progress').textContent = '已修 ' + solvedCount() + ' / 9 卷';
+    var tip = document.getElementById('desk-hint-tip');
+    var btn = document.getElementById('btn-ending');
+    if(allDone()){ tip.textContent='九卷修全，可以交卷了。'; btn.classList.add('zhu'); }
+    else{ tip.textContent='九卷修全，才能交卷。'; btn.classList.remove('zhu'); }
+  }
+
+  // 点书卷
+  document.addEventListener('click', function(e){
+    var v = e.target.closest('.vol');
+    if(!v) return;
+    var n = parseInt(v.getAttribute('data-vol'),10);
+    var b = byN[n];
+    if(b.group===2 && !group1Done()){
+      alert('箱子还锁着。先把案上三卷修完。');
+      return;
+    }
+    openLevel(n);
+  });
+
+  /* ============================================================
+     关卡：通用渲染
+     ============================================================ */
+  var curLevel = null;
+
+  function openLevel(n){
+    curLevel = n;
+    var b = byN[n];
+    document.getElementById('lv-title').textContent = b.book;
+    document.getElementById('lv-idx').textContent = b.idx + (solved[n] ? ' · 已修' : '');
+    document.getElementById('lv-body').innerHTML = buildLevel(b);
+    bindPuzzle(b);
+    show('s-level');
+  }
+
+  function buildLevel(b){
+    var h = '';
+
+    // 叙事
+    h += '<div class="narration">';
+    b.scene.forEach(function(s){
+      if(s.t==='p') h += '<p>'+s.v+'</p>';
+      else if(s.t==='say') h += '<div class="speak"><span class="name kai">'+s.name+'</span>'+s.v+'</div>';
+    });
+    h += '</div>';
+
+    // 残页
+    h += '<div class="leaf"><span class="tag kai">'+b.leaf.tag+'</span>' +
+         '<div class="classic">'+b.leaf.text+'</div>' +
+         (b.leaf.note ? '<div class="note">'+b.leaf.note+'</div>' : '') + '</div>';
+
+    // 谜题
+    var pz = b.puzzle;
+    h += '<div class="puzzle"><div class="q">'+pz.q+'</div>';
+    h += '<div id="pz-body"></div>';
+    h += '<div class="actions"><button class="btn" id="pz-check">落笔</button>' +
+         '<button class="btn ghost" id="pz-hint">问沈砚</button></div>';
+    h += '<div class="fb" id="pz-fb"></div>';
+    h += '<div class="hints" id="pz-hints" style="display:none"></div>';
+    h += '</div>';
+    return h;
+  }
+
+  /* ---------- 各类型谜题渲染 ---------- */
+  function renderPuzzleBody(b){
+    var pz = b.puzzle, host = document.getElementById('pz-body');
+    if(pz.type==='input'){
+      var h = '<div class="inputs">';
+      pz.fields.forEach(function(f){
+        h += '<div class="field"><label>'+f.label+'</label>' +
+             '<input type="number" inputmode="numeric" data-k="'+f.k+'" placeholder="?">' +
+             (f.unit?'<span class="u">'+f.unit+'</span>':'') + '</div>';
+      });
+      h += '</div>';
+      host.innerHTML = h;
+    }
+    else if(pz.type==='choice'){
+      var h2 = '<div class="opts">';
+      pz.opts.forEach(function(o){
+        h2 += '<button class="opt" data-k="'+o.k+'">'+o.t+'</button>';
+      });
+      h2 += '</div>';
+      host.innerHTML = h2;
+    }
+    else if(pz.type==='toggle'){
+      host.innerHTML = '<div class="yao-stack" id="yao-stack"></div>';
+      renderStack(b);
+    }
+    else if(pz.type==='match'){
+      var h3 = '<div class="match-wrap"><div class="mcol">';
+      pz.left.forEach(function(it){ h3 += '<div class="mitem" data-side="L" data-id="'+it.id+'">'+it.t+'</div>'; });
+      h3 += '</div><div class="mcol">';
+      pz.right.forEach(function(it){ h3 += '<div class="mitem" data-side="R" data-id="'+it.id+'">'+it.t+'</div>'; });
+      h3 += '</div></div>';
+      host.innerHTML = h3;
+    }
+    else if(pz.type==='sort'){
+      host.innerHTML = '<div class="sortlist" id="sortlist"></div>';
+      renderSort(b);
+    }
+  }
+
+  /* ---------- toggle（拼卦） ---------- */
+  var yaoState = [false,false,false,false,false,false];
+  var YAO_NAMES = ['初','二','三','四','五','上'];
+  function renderStack(b){
+    var host = document.getElementById('yao-stack');
+    if(!host) return;
+    var h='';
+    for(var i=5;i>=0;i--){
+      var isYang = yaoState[i];
+      h += '<div class="yao-row"><span class="yao-name kai">'+YAO_NAMES[i]+'</span>' +
+        '<div class="yao '+(isYang?'yang':'yin')+'" data-i="'+i+'">' +
+        '<span class="bar solid"></span><span class="bar split"></span><span class="bar split"></span>' +
+        '</div></div>';
+    }
+    host.innerHTML = h;
+  }
+
+  /* ---------- match（配对） ---------- */
+  var mSel = null;       // 当前选中的左项 id
+  var mPairs = {};       // 左 id -> 右 id
+  function renderMatchState(){
+    var host = document.getElementById('pz-body');
+    if(!host) return;
+    var pz = byN[curLevel].puzzle;
+    // 计算配对编号（按左列顺序）
+    var order = {};
+    var c = 0;
+    pz.left.forEach(function(it){ if(mPairs[it.id]){ order[it.id]=++c; } });
+
+    var items = host.querySelectorAll('.mitem');
+    for(var i=0;i<items.length;i++){
+      var el = items[i], side = el.getAttribute('data-side'), id = el.getAttribute('data-id');
+      el.className = 'mitem';
+      var old = el.querySelector('.num');
+      if(old) old.remove();
+      if(side==='L'){
+        if(mSel===id) el.classList.add('sel');
+        if(mPairs[id]){
+          el.classList.add('paired');
+          var num = document.createElement('span');
+          num.className='num'; num.textContent = order[id];
+          el.appendChild(num);
+        }
+      }else{
+        // 右项：找出是否被某个左项配对
+        var owner=null;
+        for(var k in mPairs){ if(mPairs[k]===id){ owner=k; break; } }
+        if(owner){
+          el.classList.add('paired');
+          var n2 = document.createElement('span');
+          n2.className='num'; n2.textContent = order[owner];
+          el.appendChild(n2);
+        }
+      }
+    }
+  }
+
+  /* ---------- sort（排序） ---------- */
+  var sortState = [];   // 当前顺序的 id
+  function renderSort(b){
+    var pz = b.puzzle, host = document.getElementById('sortlist');
+    if(!host) return;
+    var map = {};
+    pz.items.forEach(function(it){ map[it.id]=it.t; });
+    var h='';
+    sortState.forEach(function(id, i){
+      h += '<div class="sitem"><span class="txt">'+map[id]+'</span>' +
+        '<button class="mv" data-i="'+i+'" '+(i===0?'disabled':'')+' title="上移">↑</button></div>';
+    });
+    host.innerHTML = h;
+  }
+
+  /* ---------- 绑定谜题 ---------- */
+  function bindPuzzle(b){
+    var pz = b.puzzle;
+    var hintLv = 0;
+
+    // 初始化各类型状态
+    if(pz.type==='toggle'){ yaoState = [false,false,false,false,false,false]; }
+    if(pz.type==='match'){ mSel=null; mPairs={}; }
+    if(pz.type==='sort'){ sortState = pz.items.map(function(it){return it.id;}); }
+    renderPuzzleBody(b);
+
+    // 提示
+    document.getElementById('pz-hint').addEventListener('click', function(){
+      var box = document.getElementById('pz-hints');
+      box.style.display='block';
+      if(hintLv < b.hints.length){
+        var hh = b.hints[hintLv];
+        box.innerHTML += '<div class="hint"><span class="name kai">'+hh.name+'</span>'+hh.v+'</div>';
+        hintLv++;
+      }else{
+        box.innerHTML += '<div class="hint"><span class="name kai">沈砚</span>没有了。再翻翻书。</div>';
+      }
+    });
+
+    // 交互：点击
+    var body = document.getElementById('pz-body');
+    body.addEventListener('click', function(e){
+      // toggle
+      var y = e.target.closest('.yao');
+      if(y && pz.type==='toggle'){
+        var i = parseInt(y.getAttribute('data-i'),10);
+        yaoState[i] = !yaoState[i];
+        renderStack(b);
+        return;
+      }
+      // choice
+      var o = e.target.closest('.opt');
+      if(o && pz.type==='choice'){
+        var all = body.querySelectorAll('.opt');
+        for(var j=0;j<all.length;j++) all[j].classList.remove('pick');
+        o.classList.add('pick');
+        return;
+      }
+      // match
+      var mi = e.target.closest('.mitem');
+      if(mi && pz.type==='match'){
+        var side = mi.getAttribute('data-side'), id = mi.getAttribute('data-id');
+        if(side==='L'){
+          mSel = (mSel===id) ? null : id;
+        }else{
+          if(mSel){
+            // 若该右项已被别处占用，先解绑
+            for(var k in mPairs){ if(mPairs[k]===id) delete mPairs[k]; }
+            mPairs[mSel] = id;
+            mSel = null;
+          }
+        }
+        renderMatchState();
+        return;
+      }
+      // sort
+      var mv = e.target.closest('.mv');
+      if(mv && pz.type==='sort'){
+        var idx = parseInt(mv.getAttribute('data-i'),10);
+        if(idx>0){
+          var tmp = sortState[idx-1]; sortState[idx-1]=sortState[idx]; sortState[idx]=tmp;
+          renderSort(b);
+        }
+        return;
+      }
+    });
+
+    // 判定
+    document.getElementById('pz-check').addEventListener('click', function(){
+      checkAnswer(b);
+    });
+  }
+
+  /* ---------- 判定 ---------- */
+  function checkAnswer(b){
+    var pz = b.puzzle, fb = document.getElementById('pz-fb');
+    var ok = false;
+
+    if(pz.type==='input'){
+      var vals = {}, miss = false;
+      pz.fields.forEach(function(f){
+        var el = document.querySelector('#pz-body input[data-k="'+f.k+'"]');
+        var v = parseInt(el.value,10);
+        if(isNaN(v)) miss = true;
+        vals[f.k] = v;
+      });
+      if(miss){ fb.className='fb show wrong'; fb.innerHTML='两个数都得填。'; return; }
+      ok = true;
+      for(var k in pz.answer){ if(vals[k]!==pz.answer[k]) ok=false; }
+      if(!ok){
+        fb.className='fb show wrong';
+        if(pz.n===1){ // 雉兔同笼：给出头/脚数对比
+          vals.heads = (vals.a||0)+(vals.b||0);
+          vals.legs = (vals.a||0)*2 + (vals.b||0)*4;
+        }
+        fb.innerHTML = pz.wrong(vals);
+        return;
+      }
+    }
+
+    else if(pz.type==='choice'){
+      var pick = document.querySelector('#pz-body .opt.pick');
+      if(!pick){ fb.className='fb show wrong'; fb.innerHTML='先选一个。'; return; }
+      var k2 = pick.getAttribute('data-k');
+      if(k2!==pz.answer){
+        fb.className='fb show wrong';
+        fb.innerHTML = pz.wrong[k2] || '再想想。';
+        return;
+      }
+      ok = true;
+    }
+
+    else if(pz.type==='toggle'){
+      ok = true;
+      for(var i=0;i<6;i++){ if(yaoState[i]!==pz.answer[i]){ ok=false; break; } }
+      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong; return; }
+    }
+
+    else if(pz.type==='match'){
+      ok = true;
+      pz.left.forEach(function(it){ if(mPairs[it.id]!==it.id) ok=false; });
+      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong_msg; return; }
+    }
+
+    else if(pz.type==='sort'){
+      ok = true;
+      for(var j=0;j<pz.answer.length;j++){ if(sortState[j]!==pz.answer[j]){ ok=false; break; } }
+      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong_msg; return; }
+    }
+
+    if(ok){
+      var msg = pz.right_msg || pz.right;
+      fb.className='fb show right';
+      fb.innerHTML = msg;
+      solved[b.n] = true;
+      // 是否触发第二幕
+      if(!interludeSeen && group1Done()) { pendingInterlude = true; }
+      setTimeout(function(){ showCard(b.n); }, msg.length > 90 ? 2400 : 1400);
+    }
+  }
+
+  /* ============================================================
+     书页卡
+     ============================================================ */
+  function showCard(n){
+    var b = byN[n], c = b.card;
+    document.getElementById('card-host').innerHTML =
+      '<div class="card-page">' +
+        '<span class="stamp seal kai">已修</span>' +
+        '<h3 class="kai">'+b.book+'</h3>' +
+        '<div class="meta">'+b.dyn+'　·　'+b.meta+'　·　'+b.idx+'</div>' +
+        '<div class="quote">'+c.quote+'</div>' +
+        '<div class="plain">'+c.plain+'</div>' +
+        '<div class="pnote"><span class="name kai">沈砚批</span>　'+c.p+'</div>' +
+      '</div>';
+    show('s-card');
+  }
+
+  /* ============================================================
+     藏书阁
+     ============================================================ */
+  function renderGallery(){
+    var host = document.getElementById('gallery-grid');
+    if(!host) return;
+    var h='', got=0;
+    BOOKS.forEach(function(b){
+      if(solved[b.n]){
+        got++;
+        h += '<div class="slot filled"><div class="bname kai">'+b.book+'</div><div class="bdyn">'+b.dyn+'</div></div>';
+      }else{
+        h += '<div class="slot"><div class="empty">空　位</div></div>';
+      }
+    });
+    host.innerHTML = h;
+    document.getElementById('gal-progress').textContent = '藏书阁：' + got + ' / 9';
+    document.getElementById('btn-ending2').style.display = (got===9) ? '' : 'none';
+  }
+
+  /* ============================================================
+     初始化
+     ============================================================ */
+  renderDesk();
+  renderGallery();
+})();
+</script>
+</body>
+</html>
