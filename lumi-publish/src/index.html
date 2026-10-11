@@ -118,6 +118,7 @@
   .btn.ghost:hover{background:rgba(0,0,0,.03);color:var(--ink);}
   .btn.zhu{background:var(--zhu);}
   .btn.zhu:hover{background:#8f2f22;}
+  .btn:disabled{opacity:.4;cursor:default;pointer-events:none;}
   .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;}
 
   .hints{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;}
@@ -679,6 +680,8 @@
     document.getElementById('lv-idx').textContent = b.idx + (solved[n] ? ' · 已修' : '');
     document.getElementById('lv-body').innerHTML = buildLevel(b);
     bindPuzzle(b);
+    var lvBack = document.querySelector('#s-level .btn[data-go="s-desk"]');
+    if(lvBack) lvBack.disabled = false;
     show('s-level');
   }
 
@@ -977,6 +980,10 @@
       solved[b.n] = true;
       // 是否触发第二幕
       if(!interludeSeen && group1Done()) { pendingInterlude = true; }
+      // 过渡期间锁住「回书库」：书页卡（setTimeout 后弹出）未出现前不许离场，
+      // 否则第三卷书页卡会把樟木箱幕间顶掉、且幕间不再重播
+      var lvBack = document.querySelector('#s-level .btn[data-go="s-desk"]');
+      if(lvBack) lvBack.disabled = true;
       setTimeout(function(){ showCard(b.n); }, msg.length > 90 ? 2400 : 1400);
     }
   }
