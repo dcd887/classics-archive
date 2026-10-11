@@ -739,7 +739,7 @@
       var h3 = '<div class="match-wrap"><div class="mcol">';
       pz.left.forEach(function(it){ h3 += '<div class="mitem" data-side="L" data-id="'+it.id+'">'+it.t+'</div>'; });
       h3 += '</div><div class="mcol">';
-      pz.right.forEach(function(it){ h3 += '<div class="mitem" data-side="R" data-id="'+it.id+'">'+it.t+'</div>'; });
+      shuffleRight(pz).forEach(function(it){ h3 += '<div class="mitem" data-side="R" data-id="'+it.id+'">'+it.t+'</div>'; });
       h3 += '</div></div>';
       host.innerHTML = h3;
     }
@@ -767,6 +767,20 @@
   }
 
   /* ---------- match（配对） ---------- */
+  // 打乱右列显示顺序：任一右项都不落在与左列同序的位置，避免一一对应直接泄底
+  function shuffleRight(pz){
+    var left = pz.left, arr = pz.right.slice();
+    function shuffle(){
+      for(var i=arr.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t; }
+    }
+    function aligned(){
+      for(var i=0;i<arr.length;i++){ if(arr[i].id===left[i].id) return true; }
+      return false;
+    }
+    var tries=0;
+    do{ shuffle(); tries++; }while(aligned() && tries<50);
+    return arr;
+  }
   var mSel = null;       // 当前选中的左项 id
   var mPairs = {};       // 左 id -> 右 id
   function renderMatchState(){
