@@ -179,6 +179,32 @@
     .field input{width:76px;}
     .match-wrap{gap:8px;} .mitem{padding:9px 10px;font-size:12.5px;}
   }
+  /* ---------- 纸感 · 烛火 · 落墨 ---------- */
+  body{
+    background-image:radial-gradient(rgba(120,100,70,.05) 1px, transparent 0);
+    background-size:4px 4px;
+  }
+  body::after{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:9;
+    background:radial-gradient(120% 80% at 72% 6%, rgba(255,232,178,.06), rgba(70,52,26,.08));
+    animation:candle 7s ease-in-out infinite;
+  }
+  @keyframes candle{ 0%,100%{opacity:.7} 50%{opacity:1} }
+  @keyframes ink{ from{opacity:.2; filter:blur(1.4px);} to{opacity:1; filter:none;} }
+  .fb.right{ animation:fade .35s ease, ink .8s ease; }
+
+  /* 「先查看，再答题」：残页蒙着，题面先不出现（transition 写在基态才animate得动） */
+  #s-level .leaf .classic, #s-level .leaf .note{ transition:filter .55s ease, opacity .55s ease; }
+  #s-level.veiled .leaf .classic, #s-level.veiled .leaf .note{ filter:blur(3.5px); opacity:.3; user-select:none; }
+  #s-level .puzzle{ transition:opacity .45s ease; }
+  #s-level.veiled .puzzle{ opacity:0; pointer-events:none; }
+  #s-level:not(.veiled) .leaf-actions{ display:none; }
+
+  /* 系统"减少动效"时：CSS 动画一并降级（JS 里的打字机也已单独判断） */
+  @media (prefers-reduced-motion: reduce){
+    body::after{ animation:none; }          /* 装饰性的"烛火"呼吸直接关掉 */
+    .fb.right{ animation:fade .25s ease; }  /* 短反馈保留，去掉"落墨"的模糊过程 */
+  }
 </style>
 </head>
 <body>
@@ -191,7 +217,9 @@
       <p>入司那日，天阴着。</p>
       <p>城南旧藏书楼，推门是一股陈年纸墨的气味。老掌书没让你坐，只递来一盏灯、一把镊子。</p>
       <p>他姓沈，单名一个砚字。手上有常年翻书磨出来的厚茧。</p>
-      <div class="speak"><span class="name kai">沈砚</span>书不会说话。但它会考你。</div>
+      <p>名册摊在案角。你的名字写在最末一行——上一行被人划掉了，墨色还很新。</p>
+      <div class="speak"><span class="name kai">沈砚</span>他昨天还在。</div>
+      <div class="speak"><span class="name kai">沈砚</span>书不会说话。但它藏得住事。你的活儿，是把它藏的翻出来。</div>
       <p>你接过灯。案上摊着三卷残书，被蠹虫蛀了一夜。</p>
     </div>
     <div class="actions"><button class="btn" data-go="s-desk">进书库</button></div>
@@ -200,15 +228,20 @@
   <!-- 书库 -->
   <section class="screen" id="s-desk">
     <div class="brand"><h1>书库</h1><span class="who">九卷</span></div>
-    <div class="narration"><p>蠹虫蛀的，都是最要紧的地方。修好一卷，才算入得了门。</p></div>
+    <div class="narration">
+      <p>蠹虫蛀的，都是最要紧的地方。修好一卷，才算入得了门。</p>
+      <p>案角那卷《孙子算经》的封皮上，有人用朱笔批了四个字：<b>不必细究</b>。</p>
+      <p>阿棠凑过来看了一眼：「……这四个字，是谁批的？」</p>
+    </div>
     <div id="shelf-host"></div>
     <div class="progress" id="desk-progress"></div>
     <hr class="sep">
     <div class="actions">
       <button class="btn ghost" data-go="s-gallery">藏书阁</button>
-      <button class="btn ghost" id="btn-ending" data-go="s-ending">交卷</button>
+      <button class="btn ghost" id="btn-ending" data-go="s-ending">归位</button>
+      <button class="btn ghost" id="btn-mute">音：开</button>
     </div>
-    <div class="mini-note" id="desk-hint-tip">九卷修全，才能交卷。</div>
+    <div class="mini-note" id="desk-hint-tip">九卷修全，才准你翻樟木箱最底下一层。</div>
   </section>
 
   <!-- 关卡（动态） -->
@@ -236,7 +269,9 @@
       <p>阿棠不知什么时候蹲在书库最里头，冲你招手。</p>
       <div class="speak"><span class="name kai">阿棠</span>过来看。</div>
       <p>她掀开一口樟木箱的盖子。里面整整齐齐码着六卷书，纸都黄透了，霉味混着樟脑味涌出来。</p>
-      <div class="speak"><span class="name kai">阿棠</span>老掌书说，你那三卷是入门考。这箱子里的，才是正经难题。</div>
+      <p>箱底还有一道空槽。按尺寸，那里本该还躺着一卷。</p>
+      <div class="speak"><span class="name kai">阿棠</span>老掌书说，案上那三卷是入门。这箱子里的，才是真东西。</div>
+      <div class="speak"><span class="name kai">阿棠</span>少的这卷，架上目录里没写名字。</div>
       <div class="speak"><span class="name kai">沈砚</span>（在你身后）箱子上的锁，是给还没入门的人看的。</div>
       <div class="speak"><span class="name kai">沈砚</span>现在，你可以打开了。</div>
     </div>
@@ -252,7 +287,7 @@
     <hr class="sep">
     <div class="actions">
       <button class="btn ghost" data-go="s-desk">回书库</button>
-      <button class="btn" id="btn-ending2" data-go="s-ending">交卷</button>
+      <button class="btn" id="btn-ending2" data-go="s-ending">归位</button>
     </div>
   </section>
 
@@ -272,6 +307,7 @@
       <div class="speak"><span class="name kai">沈砚</span>这些书，从今天起，归你管了。</div>
       <p>灯芯爆了一下。</p>
       <p>你第一次觉得，纸上的这些字，是活的。</p>
+      <p>只有樟木箱底那道空槽，还空着。</p>
     </div>
     <div class="ending">
       <div class="narration" style="margin:0;">
@@ -286,6 +322,7 @@
     <div class="actions" style="margin-top:18px;">
       <button class="btn ghost" data-go="s-gallery">再看藏书阁</button>
       <button class="btn ghost" data-go="s-desk">回书库</button>
+      <button class="btn ghost" id="btn-restart">重新开始</button>
     </div>
   </section>
 
@@ -301,23 +338,30 @@
      puzzle.type: input | choice | toggle | match | sort
      ============================================================ */
   var BOOKS = [
-    /* ---------- 卷一 · 孙子算经 ---------- */
+
+/* ---------- 卷一 · 孙子算经 ---------- */
     {
       n:1, group:1, book:'孙子算经', sub:'雉兔同笼', idx:'卷一', dyn:'魏晋', meta:'子藏 · 算法',
       scene:[
         {t:'p', v:'案上第一卷，封皮已经脆了。'},
         {t:'p', v:'阿棠凑过来看了一眼。她比你早入司两年，抄书快，嘴也快。'},
         {t:'say', name:'阿棠', v:'这不就是数鸡数兔子嘛。'},
-        {t:'say', name:'沈砚', v:'（没抬头）你数数看。'}
+        {t:'say', name:'沈砚', v:'（没抬头）你数数看。'},
+        {t:'p', v:'残页底下压着另一张纸。是去年同一只笼的旧账：三十五头，八十八足。'},
+        {t:'say', name:'阿棠', v:'……咦。头数一样，脚怎么少了六只？'}
       ],
       leaf:{tag:'残页', text:'今有雉、兔同笼，上有三十五头，下有九十四足。<br>问：雉、兔各几何？答曰：雉<span class="bitten">□</span>、兔<span class="bitten">□</span>。',
-            note:'题面还看得清，答案那两个数被蠹虫蛀掉了——得你自己算。'},
-      puzzle:{type:'input', q:'笼里共 <b>35</b> 个头、<b>94</b> 只脚。雉两条腿，兔四条腿。<br>各几只？',
+            note:'题面还看得清。答案那两个数被蠹虫蛀了。可这卷记的足数，和压在下头那张旧账对不上。'},
+      puzzle:{type:'input', q:'仓吏要销的是他自己那本账：<b>35</b> 个头、<b>94</b> 只脚。旧账上写的却是 <b>88</b> 只脚。<br>先把仓吏这本算出来——雉、兔各几只？',
               fields:[{k:'a',label:'雉',unit:'只'},{k:'b',label:'兔',unit:'只'}],
               answer:{a:23,b:12},
-              right:'你填上"雉二十三、兔一十二"。<br>原文末行露了出来——"答曰：雉二十三，兔一十二。"一字不差。',
+              derived:'headsLegs',   // 由卷数据声明，供 checkAnswer 生成"头/足"对比
+              right:'你填上二十三、一十二。原文末行露了出来：'+"「答曰：雉二十三，兔一十二。」"+'<br>沈砚把旧账推回来：'+"「八十八足那本，是二十六只雉、九只兔。同一只笼，两本账。旧账是谁记的，先记着。」",
               wrong:function(d){
-                return '笼里得是 35 个头、94 只脚。<br>你填的是 '+d.heads+' 个头、'+d.legs+' 只脚。再想想。';
+                if(Math.abs((d.a||0)-23)+Math.abs((d.b||0)-12)<=2){
+                  return '沈砚：'+"「差一步。」"+'<br>你填的是 '+d.a+' 雉、'+d.b+' 兔，凑出 '+d.heads+' 头、'+d.legs+' 足。仓吏那本账上，是这个数吗？';
+                }
+                return '案上的账不认这个数：你填的凑出 '+d.heads+' 头、'+d.legs+' 足。<br>仓吏要销的那本，写的是 35 头、94 足。再算。';
               }},
       hints:[
         {name:'沈砚', v:'先假令全是雉。三十五只雉，该有多少只脚？'},
@@ -329,58 +373,76 @@
         p:'算得准，不算本事。知道该算什么，才是。'}
     },
 
-    /* ---------- 卷二 · 九章算术 ---------- */
+/* ---------- 卷二 · 洗冤集录 ---------- */
     {
-      n:2, group:1, book:'九章算术', sub:'引葭赴岸', idx:'卷二', dyn:'汉', meta:'子藏 · 算法',
+      n:2, group:1, book:'洗冤集录', sub:'头紧抵绳结', idx:'卷二', dyn:'宋', meta:'医藏 · 宋慈 撰',
       scene:[
-        {t:'p', v:'第二卷翻开，是《九章算术》。'},
-        {t:'say', name:'阿棠', v:'这本比刚才那本还老。题目全是田啊、粮啊、池子啊。'},
-        {t:'p', v:'你翻到"勾股"一章。一页上画着个方池，池子正中长着一根芦苇。'}
+        {t:'p', v:'这一卷刚翻开，门就被推开了。阿棠把一张验状拍在你案上，纸角还沾着露水。'},
+        {t:'say', name:'阿棠', v:'城南出了个案子。仵作说是自缢。可我瞧着，不太对。'},
+        {t:'p', v:'验状上写着——'}
       ],
-      leaf:{tag:'残页', text:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。<br>问：水深、葭长各几何？',
-            note:'答数被蛀了。池子边长"一丈"，就是十尺。'},
-      puzzle:{type:'input', q:'池子边长 <b>10</b> 尺，正中间长着一根芦苇，露出水面 <b>1</b> 尺。<br>把它拉向岸边，顶端刚好碰到岸。<br>水深、葭长各多少尺？',
-              fields:[{k:'a',label:'水深',unit:'尺'},{k:'b',label:'葭长',unit:'尺'}],
-              answer:{a:12,b:13},
-              right:'你填上"水深一丈二尺、葭长一丈三尺"。<br>苇尖触岸的那一瞬，水下与水上的长度，忽然成了一个直角三角——原来《九章》里的"勾股"，就是这么量出来的。',
-              wrong:function(d){
-                return '水深、半池、葭长，要正好凑成一个直角三角形。<br>你填的是 水深 '+d.a+' 尺、葭长 '+d.b+' 尺。再想想。';
+      leaf:{tag:'验状', text:'死者悬于梁下，脚下木凳倒在一旁。<br>梁上系绳处甚高，踮足、踏凳亦难够着。<br><b>其头紧抵上面绳结，几无缝隙。</b>',
+            note:'仵作判"自缢"。你翻着《洗冤集录》，觉得该再细一层。'},
+      puzzle:{type:'choice', q:'仵作判了「自缢」。验状在你手上。<br>你驳，还是不驳？',
+              opts:[
+                {k:'A',t:'自缢。绳索高、凳子倒，都是自尽的常见情形。'},
+                {k:'B',t:'被人勒死后，吊上去的。头紧抵绳结，是破绽。'},
+                {k:'C',t:'意外摔落致死，与绳索无关。'}
+              ],
+              answer:'B',
+              right:'你翻到"自缢"一条：自缢身死，绳痕是横的、匀的、绕到耳后的。<br>可这一具，头紧抵着绳结，一点缝都没有——「若是头紧抵上头，定是别人吊起」。<br>沈砚在你身后说：「仵作写了自缢。你把这条抄上，他就得改口。」',
+              wrong:{
+                A:'自缢的人往下坠，头和上面绳结之间会留出一尺来空。<br>你再看验状——这一具，头紧抵着绳结，一点缝都没有。',
+                B:'',
+                C:'她是悬在梁下的，脖子上有绳痕。摔落之说，对不上验状。'
               }},
       hints:[
-        {name:'沈砚', v:'池子边长十尺。一半是多少？'},
-        {name:'沈砚', v:'芦苇拉到岸边时，水深、半池、芦苇这三条，正好围成一个直角三角形。'},
-        {name:'沈砚', v:'术曰"半池方自乘"——五五二十五。芦苇比水深长一尺。二十五减一，再除以二。'}
+        {name:'洗冤集录', v:'自缢身死者……喉下痕紫赤色……横长九寸以上至一尺以来。'},
+        {name:'洗冤集录', v:'上面系绳头处，或高、或大，手不能攀，及不能上，则是别人吊起……'},
+        {name:'洗冤集录', v:'若是头紧抵上头，定是别人吊起。'}
       ],
-      card:{quote:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。问：水深、葭长各几何？答曰：水深一丈二尺，葭长一丈三尺。',
-        plain:'半池是五尺。把芦苇拉倒，水深、半池、芦苇正好凑成一个直角三角形——这就是"勾股"。<b>水深十二尺，芦苇十三尺</b>，差的那一尺，就是露出水面的部分。',
-        p:'芦苇量不出水深。得把它拉倒，借一个直角。'}
+      card:{quote:'若是头紧抵上头，定是别人吊起。',
+        plain:'自缢的人，身体往下坠，头和绳结之间总留着一尺来空。可要是<b>头紧紧抵着绳结</b>，那就说明——有人在人死之后，把他吊了上去。<br>这是书里最简单，也最管用的一条。',
+        p:'看得比他细，就够了吗？还不够。得看得准。'}
     },
 
-    /* ---------- 卷三 · 周易 ---------- */
+/* ---------- 卷三 · 棠阴比事 ---------- */
     {
-      n:3, group:1, book:'周易', sub:'天地交而万物通', idx:'卷三', dyn:'先秦', meta:'易藏 · 易经',
+      n:3, group:1, book:'棠阴比事', sub:'额上巾痕', idx:'卷三', dyn:'宋', meta:'子藏 · 法家',
       scene:[
-        {t:'p', v:'第三卷散成一片一片的竹简，六画错乱，拼不回去了。'},
-        {t:'say', name:'沈砚', v:'天上地下，本是常理。可这一卦偏偏反着来——地在上，天在下。天地才交得起来。'},
-        {t:'say', name:'沈砚', v:'你把它拼出来。'}
+        {t:'p', v:'阿棠抽出一卷，在手上掂了掂。'},
+        {t:'say', name:'阿棠', v:'这本有意思，《棠阴比事》，全是断案的故事。'},
+        {t:'say', name:'沈砚', v:'断案看的不是热闹。你看他，从哪儿下手。'},
+        {t:'p', v:'你翻开，第一页就写着张尚书的事。'}
       ],
-      leaf:{tag:'散简', text:'11. 泰（卦十一）<br>《泰》：小往大来，吉，亨。<br>《彖》曰："泰，小往大来。"则是天地交而万物通也……',
-            note:'简上只剩卦辞，六画散乱。'},
-      puzzle:{type:'toggle', q:'一卦自下而上六画。点亮每一画：<b>阳</b>是一整条，<b>阴</b>是断开的两段。<br>拼出这一卦——地在上，天在下。',
-              answer:[true,true,true,false,false,false], // 自下而上：初 二 三 四 五 上
-              right:'六画拼齐，纸上浮出"泰"字。<br>初九、九二、九三——三条阳爻，是<b>乾</b>，是天。<br>六四、六五、上六——三条阴爻，是<b>坤</b>，是地。<br>乾在下，坤在上。天在下头，地在上头。<br>天地交，就通了。',
-              wrong:'再数数。下卦三条要是"天"，上卦三条要是"地"。天是阳，地是阴。'},
+      leaf:{tag:'残页', text:'张尚书知江宁，有僧呈牒给凭，公据案熟视久之，判司理院勘杀人贼。<br>郡寮不晓其故，公乃召僧问披剃几年，对曰："七年。"<br>又曰："何故额有巾痕？"即首伏。<br>乃一民与僧同行道中，杀之，以其度牒自剃为僧。',
+            note:'同僚都想不通：张尚书凭什么一眼就认定，这僧人是假的？'},
+      puzzle:{type:'choice', q:'同僚都不服：凭什么一眼就断他是假和尚？<br>张尚书"据案熟视久之"——他看的是哪里？',
+              opts:[
+                {k:'A',t:'看他递上的度牒——纸色和印信不对。'},
+                {k:'B',t:'看他的额头——上面有一道戴头巾压出来的痕。'},
+                {k:'C',t:'听他的口音——不是江宁本地人。'},
+                {k:'D',t:'看他的僧袍——衣裳太新，不合规制。'}
+              ],
+              answer:'B',
+              right:'「何故额有巾痕？」<br>这一句问出口，那人当场就伏了：他杀了和尚、抢了度牒、自己剃的头。<br>剃头才几天，<b>额上还留着常年戴头巾压出来的印子</b>——真出家七年的人，不会有。<br>阿棠把案卷合上：「他答『七年』的时候，张尚书就已经知道了。」',
+              wrong:{
+                A:'度牒是真的——那是他从被杀的真和尚身上夺来的。问题不在牒上，在人身上。',
+                B:'',
+                C:'原文里张尚书一句都没问口音。他「据案熟视久之」，看的是脸。',
+                D:'僧袍新旧，原文只字未提。<br>别往书上没写的地方猜。'
+              }},
       hints:[
-        {name:'沈砚', v:'乾，是三画全阳的天。坤，是三画全阴的地。'},
-        {name:'沈砚', v:'初、二、三是下卦，四、五、上是上卦。要让地在上面——上三画全阴；天在下面——下三画全阳。'},
-        {name:'沈砚', v:'照着爻辞对：初九、九二、九三，然后六四、六五、上六。'}
+        {name:'沈砚', v:'原文里，张尚书"据案熟视久之"——他在看这个人的脸。'},
+        {name:'沈砚', v:'他问的是"披剃几年"，答"七年"。出家人七年，头上该是什么样？'},
+        {name:'沈砚', v:'"何故额有巾痕？"——刚剃的头，才留着戴头巾的压痕。'}
       ],
-      card:{quote:'泰（卦十一）（乾下坤上）　《泰》：小往大来，吉，亨。',
-        plain:'泰卦是"天在下、地在上"。看着别扭，其实是天地要交会——<b>位置反着放，反而通了。</b>六十四卦，说到底就是六条阴爻阳爻的所有排法，一共六十四种。',
-        p:'位置颠倒，未必是坏事。'}
+      card:{quote:'又曰："何故额有巾痕？"即首伏。',
+        plain:'这人杀了和尚、抢了度牒、自己剃头冒充。可剃头才几天，<b>额上还留着戴头巾压出来的印子</b>。张尚书一眼看出来——真出家七年的人，额上不会有这道痕。',
+        p:'问他七年，不是要他的答案。是要他露出破绽。<br>——记着这个法子。箱子里的六卷，卷卷都藏着破绽。'}
     },
 
-    /* ---------- 卷四 · 考工记 ---------- */
+/* ---------- 卷四 · 考工记 ---------- */
     {
       n:4, group:2, book:'考工记', sub:'三材各司其职', idx:'卷四', dyn:'先秦', meta:'儒藏 · 礼经',
       scene:[
@@ -397,8 +459,8 @@
                 {id:'fu',t:'一根根直着往外撑，一直撑到外圈'},
                 {id:'ya',t:'最外面那一圈，把整个轮子箍住'}
               ],
-              right_msg:'一毂、一辐、一牙，各归各位。<br>老掌书说得对——三样东西，各管一段，轮子才立得住。',
-              wrong_msg:'再对一对。照原文的顺序看：毂管转，辐管撑，牙管箍。'},
+              right_msg:'一毂、一辐、一牙，各归各位。轮子立起来了。<br>沈砚点头：「三样东西，各管一段。谁想抢谁的活，轮子就散。」',
+              wrong_msg:'再对一对。原文是「毂也者，以为利转也；辐也者，以为直指也；牙也者，以为固抱也」。<br>毂管转，辐管撑，牙管箍。'},
       hints:[
         {name:'沈砚', v:'毂，是轮子最里头、套着轴的那块圆木。'},
         {name:'沈砚', v:'辐，是从毂往外，一根根直着撑到外圈的木条。'},
@@ -406,10 +468,10 @@
       ],
       card:{quote:'毂也者，以为利转也；辐也者，以为直指也；牙也者，以为固抱也。',
         plain:'一个轮子三样东西：<b>毂</b>在最里头，套着轴管转；<b>辐</b>在中间，一根根直着撑开；<b>牙</b>在最外头，是一圈箍。三样各干各的活，谁不失职，轮子就算旧了，也还是好轮子。',
-        p:'三样东西，各管一段。谁也别抢谁的活。'}
+        p:'三样东西，各管一段。谁也别抢谁的活。<br>——樟木箱底那道空槽，我量过。比箱里任何一卷都厚。'}
     },
 
-    /* ---------- 卷五 · 营造法式 ---------- */
+/* ---------- 卷五 · 营造法式 ---------- */
     {
       n:5, group:2, book:'营造法式', sub:'材有八等', idx:'卷五', dyn:'宋', meta:'史藏 · 政书',
       scene:[
@@ -419,7 +481,7 @@
       ],
       leaf:{tag:'残页', text:'凡构屋之制，皆以材为祖。材有八等，度屋之大小，因而用之。<br>第一等　广九寸、厚六寸<br>第二等　广八寸二分五厘、厚五寸五分　右殿身五间至七间则用之。<br>第三等　广七寸五分、厚五寸　　右殿身三间至殿五间，或堂七间则用之。',
             note:'每一等材，配一种规模的屋子。配错了，是要塌的。'},
-      puzzle:{type:'choice', q:'眼下要盖一座 <b>殿身七间</b> 的殿。<br>照《营造法式》，该用第几等材？',
+      puzzle:{type:'choice', q:'监工递上单子：这座 <b>殿身七间</b> 的殿，他报了第三等材。<br>照《营造法式》核一遍——该用第几等？',
               opts:[
                 {k:'A',t:'第一等——广九寸、厚六寸'},
                 {k:'B',t:'第二等——广八寸二分五厘、厚五寸五分'},
@@ -427,12 +489,12 @@
                 {k:'D',t:'第八等——广四寸五分、厚三寸'}
               ],
               answer:'B',
-              right:'你把"殿身七间"四个字，对到"第二等"那一行下面。<br>严丝合缝。<br>规矩不是拿来背的，是拿来对的。',
+              right:'你把「殿身七间」对到「第二等」那一行下面。严丝合缝。<br>沈砚：「规矩不是拿来背的，是拿来对的。对不上，改房子——不是改规矩。」',
               wrong:{
-                A:'第一等底下写的是"殿身九间至十一间"。七间，还够不上。',
+                A:'第一等底下写的是「殿身九间至十一间」。七间，还够不上。',
                 B:'',
-                C:'第三等底下是"殿身三间至殿五间"。七间的殿，比它大。',
-                D:'第八等是给"殿内藻井或小亭榭"用的，太小了。'
+                C:'第三等底下是「殿身三间至殿五间」。七间的殿，比它大。',
+                D:'第八等是给「殿内藻井或小亭榭」用的。<br>拿它盖七间殿，太小了。'
               }},
       hints:[
         {name:'沈砚', v:'先找到原文里写"间数"的那几行。'},
@@ -441,112 +503,43 @@
       ],
       card:{quote:'凡构屋之制，皆以材为祖。材有八等，度屋之大小，因而用之。',
         plain:'盖房子先定"材"。材分八等，殿越大，用材越大：九到十一间的殿用第一等，五到七间用第二等，三到五间用第三等。<b>规矩写死在书里，谁也不能乱来</b>——这就是宋代的建筑标准。',
-        p:'多大的屋子，用多大的材。这是规矩，不是将就。'}
+        p:'多大的屋子，用多大的材。这是规矩，不是将就。<br>——规矩能照出人改过的地方。你翻到的那本旧账，也一样。'}
     },
 
-    /* ---------- 卷六 · 洗冤集录 ---------- */
+/* ---------- 卷六 · 九章算术 ---------- */
     {
-      n:6, group:2, book:'洗冤集录', sub:'头紧抵绳结', idx:'卷六', dyn:'宋', meta:'医藏 · 宋慈 撰',
+      n:6, group:2, book:'九章算术', sub:'引葭赴岸', idx:'卷六', dyn:'汉', meta:'子藏 · 算法',
       scene:[
-        {t:'p', v:'这一卷刚翻开，门就被推开了。阿棠把一张验状拍在你案上，纸角还沾着露水。'},
-        {t:'say', name:'阿棠', v:'城南出了个案子。仵作说是自缢。可我瞧着，不太对。'},
-        {t:'p', v:'验状上写着——'}
+        {t:'p', v:'又翻开一卷，是《九章算术》。'},
+        {t:'say', name:'阿棠', v:'这本比刚才那本还老。题目全是田啊、粮啊、池子啊。'},
+        {t:'p', v:'你翻到"勾股"一章。一页上画着个方池，池子正中长着一根芦苇。'},
+        {t:'p', v:'书页之间夹着一张工部旧册的残条：这座池子，旧册记的是"水深一丈"。旁边有人用炭笔写了两个字——<b>错了</b>。'}
       ],
-      leaf:{tag:'验状', text:'死者悬于梁下，脚下木凳倒在一旁。<br>梁上系绳处甚高，踮足、踏凳亦难够着。<br><b>其头紧抵上面绳结，几无缝隙。</b>',
-            note:'仵作判"自缢"。你翻着《洗冤集录》，觉得该再细一层。'},
-      puzzle:{type:'choice', q:'这一桩，究竟是什么？',
-              opts:[
-                {k:'A',t:'自缢。绳索高、凳子倒，都是自尽的常见情形。'},
-                {k:'B',t:'被人勒死后，吊上去的。头紧抵绳结，是破绽。'},
-                {k:'C',t:'意外摔落致死，与绳索无关。'}
-              ],
-              answer:'B',
-              right:'你把《洗冤集录》翻到"自缢"一条——<br>"自缢身死者……喉下痕紫赤色……横长九寸以上至一尺以来。"<br>自缢的绳痕，是横的、匀的、绕到耳后的。可这一具，头紧抵着绳结。<br>"若是头紧抵上头，定是别人吊起。"老掌书不知什么时候站在你身后。<br>"你不只要跟他一样看，"他说，"要看得比他细。"',
-              wrong:{
-                A:'自缢的人，身体往下坠，头和上面绳结之间会留出一尺来空。<br>可这一具，头紧紧抵着绳结，一点缝都没有。再翻翻书。',
-                B:'',
-                C:'她是悬在梁下的，脖子上有绳痕。摔落之说，对不上。'
+      leaf:{tag:'残页', text:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。<br>问：水深、葭长各几何？',
+            note:'答数被蛀了。池子边长"一丈"，就是十尺。'},
+      puzzle:{type:'input', q:'旧册记"水深一丈"，匠人说旧册错了。<br>照原文本意（池方一丈、葭生中央、出水一尺，引葭赴岸适与岸齐）——<br>水深、葭长，到底各是多少尺？',
+              fields:[{k:'a',label:'水深',unit:'尺'},{k:'b',label:'葭长',unit:'尺'}],
+              answer:{a:12,b:13},
+              right:'水深一丈二尺，葭长一丈三尺——匠人是对的。<br>苇尖触岸的那一瞬，水深、半池、葭长正好围成一个直角。<br>沈砚把旧册合上：「一丈，是照着水面量的。差的那两尺，在水底下。」',
+              wrong:function(d){
+                if(Math.abs((d.a||0)-12)+Math.abs((d.b||0)-13)<=2){
+                  return '沈砚：「差一步。」<br>你填的是 水深 '+d.a+' 尺、葭长 '+d.b+' 尺。芦苇比水深，长多少？';
+                }
+                return '水深、半池、葭长，得凑成一个直角三角形。<br>你填的是 水深 '+d.a+' 尺、葭长 '+d.b+' 尺。半池是五尺，先把它摆进去。';
               }},
       hints:[
-        {name:'洗冤集录', v:'自缢身死者……喉下痕紫赤色……横长九寸以上至一尺以来。'},
-        {name:'洗冤集录', v:'上面系绳头处，或高、或大，手不能攀，及不能上，则是别人吊起……'},
-        {name:'洗冤集录', v:'若是头紧抵上头，定是别人吊起。'}
+        {name:'沈砚', v:'池子边长十尺。一半是多少？'},
+        {name:'沈砚', v:'芦苇拉到岸边时，水深、半池、芦苇这三条，正好围成一个直角三角形。'},
+        {name:'沈砚', v:'术曰"半池方自乘"——五五二十五。芦苇比水深长一尺。二十五减一，再除以二。'}
       ],
-      card:{quote:'若是头紧抵上头，定是别人吊起。',
-        plain:'自缢的人，身体往下坠，头和绳结之间总留着一尺来空。可要是<b>头紧紧抵着绳结</b>，那就说明——有人在人死之后，把他吊了上去。<br>这是书里最简单，也最管用的一条。',
-        p:'看得比他细，就够了吗？还不够。得看得准。'}
+      card:{quote:'今有池方一丈，葭生其中央，出水一尺。引葭赴岸，适与岸齐。问：水深、葭长各几何？答曰：水深一丈二尺，葭长一丈三尺。',
+        plain:'半池是五尺。把芦苇拉倒，水深、半池、芦苇正好凑成一个直角三角形——这就是"勾股"。<b>水深十二尺，芦苇十三尺</b>，差的那一尺，就是露出水面的部分。',
+        p:'芦苇量不出水深。得把它拉倒，借一个直角。<br>——旧册是照着水面量的。写字的那个人，知道底下还有两尺。'}
     },
 
-    /* ---------- 卷七 · 棠阴比事 ---------- */
+/* ---------- 卷七 · 天工开物 ---------- */
     {
-      n:7, group:2, book:'棠阴比事', sub:'额上巾痕', idx:'卷七', dyn:'宋', meta:'子藏 · 法家',
-      scene:[
-        {t:'p', v:'阿棠抽出一卷，在手上掂了掂。'},
-        {t:'say', name:'阿棠', v:'这本有意思，《棠阴比事》，全是断案的故事。'},
-        {t:'say', name:'沈砚', v:'断案看的不是热闹。你看他，从哪儿下手。'},
-        {t:'p', v:'你翻开，第一页就写着张尚书的事。'}
-      ],
-      leaf:{tag:'残页', text:'张尚书知江宁，有僧呈牒给凭，公据案熟视久之，判司理院勘杀人贼。<br>郡寮不晓其故，公乃召僧问披剃几年，对曰："七年。"<br>又曰："何故额有巾痕？"即首伏。<br>乃一民与僧同行道中，杀之，以其度牒自剃为僧。',
-            note:'同僚都想不通：张尚书凭什么一眼就认定，这僧人是假的？'},
-      puzzle:{type:'choice', q:'张尚书"据案熟视久之"，看的是哪里？',
-              opts:[
-                {k:'A',t:'看他递上的度牒——纸色和印信不对。'},
-                {k:'B',t:'看他的额头——上面有一道戴头巾压出来的痕。'},
-                {k:'C',t:'听他的口音——不是江宁本地人。'},
-                {k:'D',t:'看他的僧袍——衣裳太新，不合规制。'}
-              ],
-              answer:'B',
-              right:'"何故额有巾痕？"<br>这一句问出口，那人当场就伏了。<br>原来他杀了一个和尚，抢了度牒，自己剃了头冒充。可剃头才几天——<b>额上还留着常年戴头巾压出的印子</b>。<br>真出家七年的人，额上不会有这道痕。',
-              wrong:{
-                A:'度牒是真的——那是他从被杀的真和尚身上夺来的。问题不在牒上。',
-                B:'',
-                C:'原文没提口音。张尚书看的是人本身，不是他的话。',
-                D:'僧袍新旧，原文也只字未提。'
-              }},
-      hints:[
-        {name:'沈砚', v:'原文里，张尚书"据案熟视久之"——他在看这个人的脸。'},
-        {name:'沈砚', v:'他问的是"披剃几年"，答"七年"。出家人七年，头上该是什么样？'},
-        {name:'沈砚', v:'"何故额有巾痕？"——刚剃的头，才留着戴头巾的压痕。'}
-      ],
-      card:{quote:'又曰："何故额有巾痕？"即首伏。',
-        plain:'这人杀了和尚、抢了度牒、自己剃头冒充。可剃头才几天，<b>额上还留着戴头巾压出来的印子</b>。张尚书一眼看出来——真出家七年的人，额上不会有这道痕。',
-        p:'问他七年，不是要他的答案。是要他露出破绽。'}
-    },
-
-    /* ---------- 卷八 · 山海经 ---------- */
-    {
-      n:8, group:2, book:'山海经', sub:'其状如其名', idx:'卷八', dyn:'先秦', meta:'史藏 · 志存记录',
-      scene:[
-        {t:'p', v:'箱里最后一本薄薄的，封皮上没有书名，只在角上画着一只兽。'},
-        {t:'say', name:'阿棠', v:'这是《山海经》？画的全是些怪东西。'},
-        {t:'say', name:'沈砚', v:'怪，是因为你没见过。古人写一只兽，写三样：像什么、叫什么、有什么用。'},
-        {t:'say', name:'沈砚', v:'你把它们对上。'}
-      ],
-      leaf:{tag:'残页', text:'南山经之首曰鹊山。其首曰招摇之山，临于西海之上，多桂，多金玉。<br>有草焉，其状如韭而青华，其名曰祝余，食之不饥。<br>有木焉，其状如谷而黑理，其华四照，其名曰迷谷，佩之不迷。',
-            note:'这是书的开头。再往后翻，一页上画了四只兽，名字却都被虫蛀了。'},
-      puzzle:{type:'match', q:'四段描述，四只兽。名字被蛀掉了。<br>照《山海经》的写法，把它们对回去。',
-              left:[{id:'feng',t:'凤凰'},{id:'xuan',t:'旋龟'},{id:'lu',t:'鹿蜀'},{id:'gu',t:'蛊雕'}],
-              right:[
-                {id:'feng',t:'其状如鸡，五采而文……见则天下安宁'},
-                {id:'xuan',t:'其状如龟而鸟首虺尾，其音如判木，佩之不聋'},
-                {id:'lu',t:'其状如马而白首，其文如虎，而赤尾，其音如谣'},
-                {id:'gu',t:'其状如雕而有角，其音如婴儿之音，是食人'}
-              ],
-              right_msg:'四只兽，各归其名。<br>它们的名字，从来不是随手起的——像什么，就叫什么。',
-              wrong_msg:'再对一对。看"其状如……"后面跟着的是哪一种活物。'},
-      hints:[
-        {name:'沈砚', v:'"其状如鸡"——像鸡的，是凤凰。'},
-        {name:'沈砚', v:'"其状如龟而鸟首虺尾"，龟身、鸟头、蛇尾——这才叫旋龟。'},
-        {name:'沈砚', v:'马身白首、虎纹赤尾，是鹿蜀；雕身有角、声如婴儿，是蛊雕。'}
-      ],
-      card:{quote:'有鸟焉，其状如鸡，五采而文，名曰凤凰……见则天下安宁。',
-        plain:'古人写一只兽，写三件事：<b>像什么、叫什么、有什么用</b>。凤凰像鸡、五彩，见了天下太平；旋龟是龟身鸟头蛇尾，佩在身上耳朵不聋。这不是编故事，是当时人记山野鸟兽的法子。',
-        p:'古人记一只兽，记的是它的用处，不只是它的样子。'}
-    },
-
-    /* ---------- 卷九 · 天工开物 ---------- */
-    {
-      n:9, group:2, book:'天工开物', sub:'造纸九步', idx:'卷九', dyn:'明', meta:'子藏 · 农家',
+      n:7, group:2, book:'天工开物', sub:'造纸九步', idx:'卷七', dyn:'明', meta:'子藏 · 农家',
       scene:[
         {t:'p', v:'最后一卷，纸比别的都新，像是后来补抄的。'},
         {t:'say', name:'阿棠', v:'《天工开物》，宋应星写的。这本我熟——我爹就是造纸的。'},
@@ -564,8 +557,8 @@
                 {id:'zhu',t:'石灰化汁涂浆，入桶下煮，八日八夜'}
               ],
               answer:['jin','sha','zhu','chong','chao'],
-              right:'斫竹漂浸，杀青去皮，石灰浆煮，舂捣成泥，最后抄帘成张。<br>一道都不能少，一道都不能倒。<br>你写字的那张纸，背后是十几道手。',
-              wrong_msg:'顺序反了。先有竹子，才有纸——从砍竹那一头想起。'},
+              right:'斫竹漂浸，杀青去皮，石灰浆煮，舂捣成泥，最后抄帘成张。<br>一道都不能少，一道都不能倒。<br>阿棠看了很久才开口：「我爹的手，冬天全是裂口。原来是这么来的。」',
+              wrong_msg:'顺序反了。先有竹子，才有纸——从砍竹那一头想起。<br>（漂浸、杀青、石灰煮、舂捣、抄帘：五道手，一道压一道。）'},
       hints:[
         {name:'沈砚', v:'先砍竹。芒种前后上山斫伐，截断了泡在水塘里。'},
         {name:'沈砚', v:'泡满百日，槌洗去皮，这道叫"杀青"。杀青之后，才轮到石灰浆煮。'},
@@ -573,7 +566,62 @@
       ],
       card:{quote:'浸至百日之外，加功槌洗，洗去粗壳与青皮，是名杀青。',
         plain:'造一张竹纸，先把竹子砍下浸上百日，槌洗去皮（这道叫"<b>杀青</b>"），再用石灰浆煮上八天八夜，舂成泥，才轮到抄帘成张。<b>你写字的这张纸，背后是十几道手。</b>',
-        p:'你写的字，轻。可它不便宜。'}
+        p:'你写的字，轻。可它不便宜。<br>——补抄这一卷的人，用的是新纸。他是谁？'}
+    },
+
+/* ---------- 卷八 · 周易 ---------- */
+    {
+      n:8, group:2, book:'周易', sub:'天地交而万物通', idx:'卷八', dyn:'先秦', meta:'易藏 · 易经',
+      scene:[
+        {t:'p', v:'这一卷散成一片一片的竹简，六画错乱，拼不回去了。'},
+        {t:'say', name:'沈砚', v:'天上地下，本是常理。可这一卦偏偏反着来——地在上，天在下。天地才交得起来。'},
+        {t:'say', name:'沈砚', v:'你把它拼出来。'}
+      ],
+      leaf:{tag:'散简', text:'11. 泰（卦十一）<br>《泰》：小往大来，吉，亨。<br>《彖》曰："泰，小往大来。"则是天地交而万物通也……',
+            note:'简上只剩卦辞，六画散乱。'},
+      puzzle:{type:'toggle', q:'一卦自下而上六画。点亮每一画：<b>阳</b>是一整条，<b>阴</b>是断开的两段。<br>拼出这一卦——地在上，天在下。',
+              answer:[true,true,true,false,false,false], // 自下而上：初 二 三 四 五 上
+              right:'六画拼齐，纸上浮出「泰」字。<br>初九、九二、九三——三条阳爻，是天；六四、六五、上六——三条阴爻，是地。<br>天在下头，地在上头。位置反着放，反而通了。<br>沈砚：「你记着这个。往后看人看事，都用得着。」',
+              wrong:'再数数。下卦三条要是「天」，上卦三条要是「地」——天是阳（一整条），地是阴（断开的两段）。<br>你现在点亮的，天地反了。'},
+      hints:[
+        {name:'沈砚', v:'乾，是三画全阳的天。坤，是三画全阴的地。'},
+        {name:'沈砚', v:'初、二、三是下卦，四、五、上是上卦。要让地在上面——上三画全阴；天在下面——下三画全阳。'},
+        {name:'沈砚', v:'照着爻辞对：初九、九二、九三，然后六四、六五、上六。'}
+      ],
+      card:{quote:'泰（卦十一）（乾下坤上）　《泰》：小往大来，吉，亨。',
+        plain:'泰卦是"天在下、地在上"。看着别扭，其实是天地要交会——<b>位置反着放，反而通了。</b>六十四卦，说到底就是六条阴爻阳爻的所有排法，一共六十四种。',
+        p:'位置颠倒，未必是坏事。<br>——可这一卷竹简，是谁拆散的？拆的手法，和他拆别的书，一样。'}
+    },
+
+/* ---------- 卷九 · 山海经 ---------- */
+    {
+      n:9, group:2, book:'山海经', sub:'其状如其名', idx:'卷九', dyn:'先秦', meta:'史藏 · 志存记录',
+      scene:[
+        {t:'p', v:'箱里最后一本薄薄的，封皮上没有书名，只在角上画着一只兽。'},
+        {t:'say', name:'阿棠', v:'这是《山海经》？画的全是些怪东西。'},
+        {t:'say', name:'沈砚', v:'怪，是因为你没见过。古人写一只兽，写三样：像什么、叫什么、有什么用。'},
+        {t:'say', name:'沈砚', v:'你把它们对上。'}
+      ],
+      leaf:{tag:'残页', text:'南山经之首曰鹊山。其首曰招摇之山，临于西海之上，多桂，多金玉。<br>有草焉，其状如韭而青华，其名曰祝余，食之不饥。<br>有木焉，其状如谷而黑理，其华四照，其名曰迷谷，佩之不迷。',
+            note:'这是书的开头。再往后翻，一页上画了四只兽，名字却都被虫蛀了。'},
+      puzzle:{type:'match', q:'四段描述，四只兽。名字被蛀掉了。<br>照《山海经》的写法，把它们对回去。',
+              left:[{id:'feng',t:'凤凰'},{id:'xuan',t:'旋龟'},{id:'lu',t:'鹿蜀'},{id:'gu',t:'蛊雕'}],
+              right:[
+                {id:'feng',t:'其状如鸡，五采而文……见则天下安宁'},
+                {id:'xuan',t:'其状如龟而鸟首虺尾，其音如判木，佩之不聋'},
+                {id:'lu',t:'其状如马而白首，其文如虎，而赤尾，其音如谣'},
+                {id:'gu',t:'其状如雕而有角，其音如婴儿之音，是食人'}
+              ],
+              right_msg:'四只兽，各归其名。它们的名字，从来不是随手起的——像什么，就叫什么。<br>沈砚：「写书的人未必见过它，可他写得比见过的人还准。你想想，这是为什么。」',
+              wrong_msg:'再看一遍「其状如……」后面跟着的是哪一种活物。<br>像鸡的、像龟的、像马的、像雕的——四只里总有一只对不上。'},
+      hints:[
+        {name:'沈砚', v:'"其状如鸡"——像鸡的，是凤凰。'},
+        {name:'沈砚', v:'"其状如龟而鸟首虺尾"，龟身、鸟头、蛇尾——这才叫旋龟。'},
+        {name:'沈砚', v:'马身白首、虎纹赤尾，是鹿蜀；雕身有角、声如婴儿，是蛊雕。'}
+      ],
+      card:{quote:'有鸟焉，其状如鸡，五采而文，名曰凤凰……见则天下安宁。',
+        plain:'古人写一只兽，写三件事：<b>像什么、叫什么、有什么用</b>。凤凰像鸡、五彩，见了天下太平；旋龟是龟身鸟头蛇尾，佩在身上耳朵不聋。这不是编故事，是当时人记山野鸟兽的法子。',
+        p:'古人记一只兽，记的是它的用处，不只是它的样子。'}
     }
   ];
 
@@ -586,10 +634,161 @@
   var solved = {};          // n -> true
   var interludeSeen = false;
   var pendingInterlude = false;
+  var failCount = 0;        // 本卷连续答错次数（进关卡归零）
+
+  /* 答错统一收口：错到第 3 次，让阿棠递一句"半句提示"——只指路，不给答案 */
+  function wrongOut(fb, b, msg){
+    failCount++;
+    var extra = '';
+    if(failCount === 3){
+      extra = '<div class="hint" style="margin-top:8px"><span class="name kai">阿棠</span>……要不你问问老掌书？他刚才那三句，你一句都还没试。</div>';
+    }else if(failCount > 3){
+      extra = '<div class="hint" style="margin-top:8px"><span class="name kai">沈砚</span>（把书往你面前推了推，没说话。）</div>';
+    }
+    fb.className = 'fb show wrong';
+    fb.innerHTML = msg + extra;
+    sfx('wrong');
+  }
+
+  /* ============================================================
+     音效：WebAudio 现场合成。零素材、零外链（发布校验禁外链也能过）
+     ============================================================ */
+  var actx = null, muted = false;
+
+  function audioCtx(){
+    if(actx === null){
+      try{ actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ actx = false; }
+    }
+    if(actx && actx.state === 'suspended'){ try{ actx.resume(); }catch(e){} }
+    return actx || null;
+  }
+
+  function blip(freq, dur, type, vol, slideTo){
+    var c = audioCtx(); if(!c) return;
+    try{
+      var o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol || 0.05, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(t); o.stop(t + dur + 0.03);
+    }catch(e){}
+  }
+
+  function paperNoise(dur, vol, freq){
+    var c = audioCtx(); if(!c) return;
+    try{
+      var len = Math.floor(c.sampleRate * dur);
+      var buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+      for(var i=0;i<len;i++){ d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2.4); }
+      var src = c.createBufferSource(); src.buffer = buf;
+      var f = c.createBiquadFilter(); f.type='bandpass'; f.frequency.value = freq || 1700; f.Q.value = 0.7;
+      var g = c.createGain(); g.gain.value = vol || 0.045;
+      src.connect(f); f.connect(g); g.connect(c.destination); src.start();
+    }catch(e){}
+  }
+
+  function sfx(name){
+    if(muted) return;
+    if(name==='paper') paperNoise(0.16, 0.05, 1500);
+    else if(name==='open') paperNoise(0.24, 0.045, 1100);
+    else if(name==='ink') blip(520, 0.08, 'triangle', 0.04, 320);
+    else if(name==='right'){ blip(640, 0.12, 'sine', 0.045); setTimeout(function(){ blip(880, 0.18, 'sine', 0.035); }, 95); }
+    else if(name==='wrong') blip(150, 0.18, 'sine', 0.05, 96);
+  }
+
+  function updateMuteBtn(){
+    var el = document.getElementById('btn-mute');
+    if(el) el.textContent = '音：' + (muted ? '关' : '开');
+  }
+
+  /* ============================================================
+     时辰：让"这一卷是在什么时辰修的"有实感
+     ============================================================ */
+  var SHICHEN = {1:'辰时·天阴', 2:'巳时·露重', 3:'午时·日斜', 4:'未时·樟木气',
+                 5:'申时·灯下', 6:'酉时·上灯', 7:'戌时·夜深', 8:'亥时·漏下三刻', 9:'子时·天将明'};
+
+  /* ============================================================
+     打字机：只逐字出"对白"；复看过的卷、或系统开了"减少动效"时整段直出
+     ============================================================ */
+  var TYPE_MS = 30;          // 正常速度（毫秒/字）
+  var TYPE_MS_CALM = 12;     // 系统"减少动效"时的速度：不跳过，只快放
+
+  function typeSpeak(el, html, speed){
+    var tokens = html.match(/<[^>]+>|[\s\S]/g) || [];
+    var i = 0, out = '';
+    el.innerHTML = '';
+    (function step(){
+      while(i < tokens.length){
+        var t = tokens[i++];
+        out += t;
+        if(t.charAt(0) === '<') continue;   // 标签不占时间
+        break;
+      }
+      el.innerHTML = out;
+      if(i < tokens.length) setTimeout(step, speed || TYPE_MS);
+    })();
+  }
+
+  function animateScene(b){
+    if(solved[b.n]) return;                        // 复看不重播
+    // 系统"减少动效"时不再整段跳过，改为快放：保留"这句话有重量"的感觉，又不拖时间
+    var calm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var speed = calm ? TYPE_MS_CALM : TYPE_MS;
+    var box = document.querySelector('#lv-body .narration');
+    if(!box) return;
+    var kids = [].slice.call(box.children), delay = 0;
+    b.scene.forEach(function(s, idx){
+      var el = kids[idx]; if(!el) return;
+      if(s.t === 'say'){
+        var nameEl = el.querySelector('.name');
+        el.innerHTML = nameEl ? nameEl.outerHTML : '';
+        var span = document.createElement('span');
+        el.appendChild(span);
+        setTimeout(function(){ typeSpeak(span, s.v, speed); }, delay);
+        delay += calm ? Math.min(420, 60 + String(s.v).length * 9)
+                      : Math.min(900, 140 + String(s.v).length * TYPE_MS * 0.55);
+      }else{
+        el.style.opacity = '0';
+        el.style.transition = 'opacity .4s ease';
+        setTimeout(function(){ el.style.opacity = '1'; }, delay);
+        delay += calm ? 110 : 240;
+      }
+    });
+  }
 
   function solvedCount(){ var c=0; for(var k in solved){ if(solved[k]) c++; } return c; }
-  function group1Done(){ return solved[1]&&solved[2]&&solved[3]; }
+  function group1Done(){ return BOOKS.filter(function(b){return b.group===1;}).every(function(b){ return !!solved[b.n]; }); }
   function allDone(){ return solvedCount()===9; }
+
+  /* ============================================================
+     进度存档（localStorage；离线可用，读写失败也不影响游戏）
+     ============================================================ */
+  var SAVE_KEY = 'diandangsi.save.v1';
+
+  function saveProgress(){
+    try{
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ solved:solved, interludeSeen:interludeSeen }));
+    }catch(e){}
+  }
+
+  function loadProgress(){
+    try{
+      var raw = localStorage.getItem(SAVE_KEY);
+      if(!raw) return false;
+      var d = JSON.parse(raw);
+      if(d && d.solved){ solved = d.solved; interludeSeen = !!d.interludeSeen; }
+      return solvedCount() > 0;
+    }catch(e){ return false; }
+  }
+
+  function clearProgress(){
+    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  }
 
   /* ============================================================
      屏幕切换
@@ -611,12 +810,13 @@
     // 回书库时，若刚到第二幕，先播幕间
     if(dest==='s-desk' && pendingInterlude && !interludeSeen){
       interludeSeen = true; pendingInterlude = false;
+      saveProgress();
       show('s-interlude');
       return;
     }
-    // 未修全时不能交卷
+    // 未修全时不能归位
     if(dest==='s-ending' && !allDone()){
-      alert('九卷还没修全。先去书库，把没修完的补上。');
+      alert('九卷还没修全。少的那几卷，还在书库里搁着。');
       return;
     }
     show(dest);
@@ -651,8 +851,8 @@
     document.getElementById('desk-progress').textContent = '已修 ' + solvedCount() + ' / 9 卷';
     var tip = document.getElementById('desk-hint-tip');
     var btn = document.getElementById('btn-ending');
-    if(allDone()){ tip.textContent='九卷修全，可以交卷了。'; btn.classList.add('zhu'); }
-    else{ tip.textContent='九卷修全，才能交卷。'; btn.classList.remove('zhu'); }
+    if(allDone()){ tip.textContent='九卷修全。樟木箱最底下那层，归你了。'; btn.classList.add('zhu'); }
+    else{ tip.textContent='九卷修全，才准你翻樟木箱最底下一层。'; btn.classList.remove('zhu'); }
   }
 
   // 点书卷
@@ -662,7 +862,7 @@
     var n = parseInt(v.getAttribute('data-vol'),10);
     var b = byN[n];
     if(b.group===2 && !group1Done()){
-      alert('箱子还锁着。先把案上三卷修完。');
+      alert('箱子还锁着。案上三卷，先修完。');
       return;
     }
     openLevel(n);
@@ -675,14 +875,31 @@
 
   function openLevel(n){
     curLevel = n;
+    failCount = 0;
     var b = byN[n];
     document.getElementById('lv-title').textContent = b.book;
-    document.getElementById('lv-idx').textContent = b.idx + (solved[n] ? ' · 已修' : '');
+    document.getElementById('lv-idx').textContent = b.idx + (solved[n] ? ' · 已修' : '') + (SHICHEN[n] ? ' · ' + SHICHEN[n] : '');
     document.getElementById('lv-body').innerHTML = buildLevel(b);
     bindPuzzle(b);
     var lvBack = document.querySelector('#s-level .btn[data-go="s-desk"]');
     if(lvBack) lvBack.disabled = false;
     show('s-level');
+    sfx('open');
+
+    // 「先查看，再答题」：新卷起先是蒙着的；已修过的卷直接展开（复看不走仪式）
+    var scr = document.getElementById('s-level');
+    var lb = document.getElementById('leaf-open');
+    var veiled = !solved[n];
+    if(scr){ if(veiled) scr.classList.add('veiled'); else scr.classList.remove('veiled'); }
+    if(lb){
+      lb.style.display = veiled ? '' : 'none';
+      lb.onclick = function(){
+        if(scr) scr.classList.remove('veiled');
+        lb.style.display = 'none';
+        sfx('paper');
+      };
+    }
+    animateScene(b);
   }
 
   function buildLevel(b){
@@ -696,10 +913,11 @@
     });
     h += '</div>';
 
-    // 残页
+    // 残页（起先是蒙着的：先"查看"，再答题）
     h += '<div class="leaf"><span class="tag kai">'+b.leaf.tag+'</span>' +
          '<div class="classic">'+b.leaf.text+'</div>' +
          (b.leaf.note ? '<div class="note">'+b.leaf.note+'</div>' : '') + '</div>';
+    h += '<div class="actions leaf-actions"><button class="btn" id="leaf-open">展开残页</button></div>';
 
     // 谜题
     var pz = b.puzzle;
@@ -858,7 +1076,7 @@
         box.innerHTML += '<div class="hint"><span class="name kai">'+hh.name+'</span>'+hh.v+'</div>';
         hintLv++;
       }else{
-        box.innerHTML += '<div class="hint"><span class="name kai">沈砚</span>没有了。再翻翻书。</div>';
+        box.innerHTML += '<div class="hint"><span class="name kai">阿棠</span>老掌书不肯多说了。他刚才那三句，你一句一句试。</div>';
       }
     });
 
@@ -920,6 +1138,7 @@
   function checkAnswer(b){
     var pz = b.puzzle, fb = document.getElementById('pz-fb');
     var ok = false;
+    sfx('ink');
 
     if(pz.type==='input'){
       var vals = {}, miss = false;
@@ -929,27 +1148,25 @@
         if(isNaN(v)) miss = true;
         vals[f.k] = v;
       });
-      if(miss){ fb.className='fb show wrong'; fb.innerHTML='两个数都得填。'; return; }
+      if(miss){ wrongOut(fb, b, '空着不动，书不会自己补上。'); return; }
       ok = true;
       for(var k in pz.answer){ if(vals[k]!==pz.answer[k]) ok=false; }
       if(!ok){
-        fb.className='fb show wrong';
-        if(pz.n===1){ // 雉兔同笼：给出头/脚数对比
+        if(pz.derived==='headsLegs'){
           vals.heads = (vals.a||0)+(vals.b||0);
           vals.legs = (vals.a||0)*2 + (vals.b||0)*4;
         }
-        fb.innerHTML = pz.wrong(vals);
+        wrongOut(fb, b, pz.wrong(vals));
         return;
       }
     }
 
     else if(pz.type==='choice'){
       var pick = document.querySelector('#pz-body .opt.pick');
-      if(!pick){ fb.className='fb show wrong'; fb.innerHTML='先选一个。'; return; }
+      if(!pick){ wrongOut(fb, b, '阿棠：你还没挑呢。'); return; }
       var k2 = pick.getAttribute('data-k');
       if(k2!==pz.answer){
-        fb.className='fb show wrong';
-        fb.innerHTML = pz.wrong[k2] || '再想想。';
+        wrongOut(fb, b, pz.wrong[k2] || '……你再看看。');
         return;
       }
       ok = true;
@@ -958,28 +1175,30 @@
     else if(pz.type==='toggle'){
       ok = true;
       for(var i=0;i<6;i++){ if(yaoState[i]!==pz.answer[i]){ ok=false; break; } }
-      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong; return; }
+      if(!ok){ wrongOut(fb, b, pz.wrong); return; }
     }
 
     else if(pz.type==='match'){
       ok = true;
       pz.left.forEach(function(it){ if(mPairs[it.id]!==it.id) ok=false; });
-      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong_msg; return; }
+      if(!ok){ wrongOut(fb, b, pz.wrong_msg); return; }
     }
 
     else if(pz.type==='sort'){
       ok = true;
       for(var j=0;j<pz.answer.length;j++){ if(sortState[j]!==pz.answer[j]){ ok=false; break; } }
-      if(!ok){ fb.className='fb show wrong'; fb.innerHTML=pz.wrong_msg; return; }
+      if(!ok){ wrongOut(fb, b, pz.wrong_msg); return; }
     }
 
     if(ok){
       var msg = pz.right_msg || pz.right;
       fb.className='fb show right';
       fb.innerHTML = msg;
+      sfx('right');
       solved[b.n] = true;
       // 是否触发第二幕
       if(!interludeSeen && group1Done()) { pendingInterlude = true; }
+      saveProgress();
       // 过渡期间锁住「回书库」：书页卡（setTimeout 后弹出）未出现前不许离场，
       // 否则第三卷书页卡会把樟木箱幕间顶掉、且幕间不再重播
       var lvBack = document.querySelector('#s-level .btn[data-go="s-desk"]');
@@ -1028,8 +1247,36 @@
   /* ============================================================
      初始化
      ============================================================ */
+  var resumed = loadProgress();
   renderDesk();
   renderGallery();
+  if(resumed){
+    show('s-desk');
+    var tipEl = document.getElementById('desk-hint-tip');
+    if(tipEl) tipEl.textContent = '上次修到 ' + solvedCount() + ' 卷。案上那几卷，还摊着。';
+  }
+
+  // 重新开始（清档重来）
+  var btnRestart = document.getElementById('btn-restart');
+  if(btnRestart){
+    btnRestart.addEventListener('click', function(){
+      clearProgress();
+      location.reload();
+    });
+  }
+
+  // 静音设置（本地记住；读不到就当"开"）
+  try{ muted = (localStorage.getItem('diandangsi.muted') === '1'); }catch(e){}
+  updateMuteBtn();
+  var btnMute = document.getElementById('btn-mute');
+  if(btnMute){
+    btnMute.addEventListener('click', function(){
+      muted = !muted;
+      try{ localStorage.setItem('diandangsi.muted', muted ? '1' : '0'); }catch(e){}
+      updateMuteBtn();
+      if(!muted) sfx('paper');
+    });
+  }
 })();
 </script>
 </body>
