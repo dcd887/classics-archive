@@ -12,6 +12,8 @@
     "validate": "node scripts/validate.mjs"
   },
   "devDependencies": {
-    "@66rpg/lumimaker": "^0.1.52"
+    "@66rpg/lumimaker": "^0.1.54",
+    "@66rpg/lumimaker-create": "^0.1.54",
+    "@66rpg/lumimaker-win32-x64": "^0.1.54"
   }
 }
