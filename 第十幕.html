@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 樟木箱底 · 第十幕</title>
+<style>
+  /* ══ 色板：与第一–九幕逐字相同 —— 9 个 token + 既有平涂旧木 #b9a88c，不新增颜色 ══ */
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    --l1:2.2px; --l2:1.4px; --l3:0.9px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    display:flex; align-items:center; justify-content:center; padding:8px;
+  }
+  /* 舞台宽度取三处上界的最小值：视窗宽、1200、以及「视窗高 − 台账 64 − 上下留白 24」换算来的宽。
+     只按宽度算（旧写法 min(97vw,1200px)）的话，窗口一矮舞台上下就被切（附录 A.2 / 坑 23）。*/
+  #app{width:min(100%,1200px,calc((100vh - 88px) * 1.66667));min-height:0;display:flex;flex-direction:column}
+  #stage{display:block;width:100%;height:auto;aspect-ratio:1200/720;background:var(--paper);overflow:hidden}
+  #hud{flex:0 0 64px;height:64px;display:flex;align-items:center;gap:14px;
+       background:var(--paper);border-top:1px solid var(--line2);padding:0 6px}
+  #slots{display:flex;gap:4px}
+  .slot{width:56px;height:56px;border:1px solid transparent;position:relative;cursor:default}
+  .slot .under{position:absolute;left:8px;right:8px;bottom:6px;height:1px;background:var(--line2)}
+  .slot svg{display:block;width:52px;height:52px;margin:1px;transition:transform 120ms ease}
+  .slot.has{cursor:pointer}
+  .slot.sel{border-color:var(--zhu)}
+  .slot.sel svg{transform:translateY(-2px)}
+  #caption{margin-left:auto;margin-right:8px;max-width:58%;
+           font-family:"Kaiti SC","STKaiti","KaiTi",serif;
+           font-size:13px;line-height:1.6;color:var(--ink2);text-align:right;
+           opacity:0;transition:opacity 500ms ease}
+  #caption.on{opacity:1}
+  #caption.zhu{color:var(--zhu)}
+
+  /* ══ 线宽三级（与前几幕同值；vector-effect 保证跨视图/跨缩放不漂移）══ */
+  .l1{stroke:var(--ink);stroke-width:var(--l1);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l2{stroke:var(--ink2);stroke-width:var(--l2);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l3{stroke:var(--faint);stroke-width:var(--l3);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .miter{stroke-linejoin:miter}
+  .f-wood{fill:#b9a88c}
+  .f-card{fill:var(--card)}
+  .f-zhu{fill:var(--zhu)}
+  .tx{fill:var(--ink);font-family:"Songti SC","STSong",Georgia,serif}
+  .tx-k{fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .tx-z{fill:var(--zhu);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .shadow{fill:var(--ink);opacity:.08;stroke:none;pointer-events:none}
+
+  /* ══ 视图切换（本幕 2 个视图：庫房全景 + 箱底近景；台账与过渡页是覆盖层）══ */
+  .view{opacity:0;pointer-events:none;transition:opacity 500ms ease}
+  .view.active{opacity:1;pointer-events:auto}
+
+  /* ══ 命中（修正 · 附录 A.4）════════════════════════════════════════════
+     `.hs .hit` 写的是显式 `pointer-events:all`，那是**显式值**，压过祖先继承来的
+     none；而 `opacity:0` 的元素**照常参与命中测试**。于是收起的台账、关着的幕间、
+     没进去的近景里那些看不见的热区，仍在文档顺序更后的位置接得住鼠标 ——
+     点这一件，被那一件截胡。这里把整棵子树钉死；**任何一条 .hit 的写法都没改**。*/
+  .view:not(.active), .view:not(.active) *,
+  #ledger:not(.on),   #ledger:not(.on) *,
+  #bridge:not(.on),   #bridge:not(.on) *,
+  .paper:not(.show),  .paper:not(.show) *{pointer-events:none!important}
+  /* 上層（台账／幕间）压着时，底下场景整棵钉死 */
+  #world.modal .view, #world.modal .view *{pointer-events:none!important}
+  /* 纸层本身不吃点击，纸展开了才吃（判序里纸排在台账之前，见 click）*/
+  #paper-layer{pointer-events:none}
+  #paper-layer .paper.show{pointer-events:auto}
+
+  /* ══ 热点：默认 / 可点 / 已取 三态光标 ══ */
+  .hs{cursor:default}
+  .hs .hit{fill:transparent;stroke:none;pointer-events:all}
+  .hs.on .hit{cursor:pointer}
+  .hs.on:hover .art path,.hs.on:hover .art rect,.hs.on:hover .art circle,
+  .hs.on:hover .art ellipse,.hs.on:hover .art line,.hs.on:hover .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.armed .art path,.hs.armed .art rect,.hs.armed .art circle,
+  .hs.armed .art ellipse,.hs.armed .art line,.hs.armed .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.on:hover .art text,.hs.armed .art text{fill:var(--zhu)}
+  .hs.gone, .hs.gone *{pointer-events:none}
+  .hs.gone .art{opacity:0}
+  /* 已歸槽的那一槽：留在箱底、朱点现出，仍可点（点它只得到一句方位话）*/
+  .hs.filled .art{transition:opacity 320ms ease}
+  .hs.breathe .art *{stroke:var(--zhu)!important;animation:breathe 1.2s ease-in-out 2}
+  @keyframes breathe{0%,100%{stroke-opacity:1}50%{stroke-opacity:.4}}
+
+  /* ══ 视角规格（§十二）：屏幕坐标 = 正面坐标 + 深度·(0,−0.5)，k = 0.5 ══
+     本幕深度预算：庫房地面随画面裁切 / 樟木箱箱蓋頂面進深 18（帶高 9）/
+     箱體那道橫帶進深 0（竖直面）/ 案面 24（帶高 12）/ 箱底近景裡箱蓋掀起的那一面 0（竖直面）/
+     箱底（水平面）進深 24（帶高 12）/ 箱前沿 0（竖直面）/
+     十道槽（凹面，皆 0）、簏、無名封皮、銅鎖、印 皆 0（竖直面）。
+     **全部 ≤ 80** —— 本幕没有超预算的构件。 */
+  .floor{fill:var(--paper2);stroke:none}
+  .slab{fill:var(--card);stroke:none}
+  .recess{fill:var(--paper2);stroke:none}
+
+  /* ══ 世界变化 ① 樟木箱：掀蓋 / 合蓋 ══ */
+  #chest-lid{transition:transform 420ms ease}
+  #chest.open #chest-lid{transform:translate(0,-30px)}
+  #chest-mouth{opacity:0;transition:opacity 300ms ease}
+  #chest.open #chest-mouth{opacity:1}
+  #chest-shut{opacity:0;transition:opacity 360ms ease}
+  #chest.shut #chest-shut{opacity:1}
+  /* ══ 世界变化 ② 箱底近景：一道槽收進了一物（槽上現出一點朱與「已歸」）══ */
+  .mark{opacity:0;transition:opacity 300ms ease}
+  .hs.filled .mark{opacity:1}
+  /* ══ 世界变化 ③ 箱蓋落下（合卷）══ */
+  #lid-down{transform:translateY(-700px);opacity:0;
+            transition:transform 460ms ease,opacity 300ms ease}
+  #lid-down.on{transform:translateY(0);opacity:1}
+  #lid-lock,#lid-seal{opacity:0;transition:opacity 340ms ease}
+  #lid-lock.on,#lid-seal.on{opacity:1}
+  /* ══ 世界变化 ④ 簏裡的牌數（取走一枚就少一枚）══ */
+  #basket-n{transition:opacity 200ms ease}
+  /* ══ 錯法：手上的東西抖一下（東西仍在原處）══ */
+  @keyframes shake{0%,100%{transform:translateX(0)}35%{transform:translateX(-3px)}70%{transform:translateX(3px)}}
+  .shaking{animation:shake 130ms ease-in-out 2}
+  /* ══ 錯法：牌順箱底滑回的那一下（現場變化，牌不消失、可立即重放）══ */
+  @keyframes fall{0%{opacity:1}100%{opacity:0}}
+  #tag-ghost{opacity:0}
+  #tag-ghost.fall{animation:fall 460ms ease-in forwards}
+  #tag-ghost.at-s1{transform:translate(15px,345px)}
+  #tag-ghost.at-s2{transform:translate(159px,345px)}
+  #tag-ghost.at-s3{transform:translate(303px,345px)}
+  #tag-ghost.at-s4{transform:translate(447px,345px)}
+  #tag-ghost.at-s5{transform:translate(591px,345px)}
+  #tag-ghost.at-s6{transform:translate(15px,481px)}
+  #tag-ghost.at-s7{transform:translate(159px,481px)}
+  #tag-ghost.at-s8{transform:translate(303px,481px)}
+  #tag-ghost.at-s9{transform:translate(447px,481px)}
+  #tag-ghost.at-s10{transform:translate(591px,481px)}
+  /* ══ 錯法累到三次：箱底留一塊 12% 朱砂（兩處各一組，不是新色）══ */
+  #prints{opacity:0;transition:opacity 260ms ease}
+  #prints.show{opacity:1}
+  #prints2{opacity:0;transition:opacity 260ms ease}
+  #prints2.show{opacity:1}
+  /* ══ 拿在手上的東西離位微抬 ══ */
+  .lift .art{opacity:.72}
+  /* ══ 取走之後留在原處的那個位置（架上空了，痕迹还在）══ */
+  #key-stand,#cover-stand,#lock-stand,#seal-stand{transition:opacity 300ms ease}
+  #key-stand.taken,#cover-stand.taken,#lock-stand.taken,#seal-stand.taken{opacity:.30}
+
+  /* ══ 纸（在場景內放大展開，不切屏、不加暗底遮罩）══ */
+  .paper{opacity:0;pointer-events:none;transition:opacity 260ms ease}
+  .paper.show{opacity:1;pointer-events:auto}
+  .paper-title{font-size:21px;fill:var(--ink);letter-spacing:.18em}
+  .paper-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  .paper-body{font-size:17px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.02em}
+  .paper-body .key{font-size:19px}
+  .paper-close{font-size:12px;fill:var(--faint);letter-spacing:.08em}
+
+  /* ══ 外殼：典藏司「值房台账」（与前几幕同一套）══ */
+  #ledger{opacity:0;pointer-events:none;transition:opacity 420ms ease}
+  #ledger.on{opacity:1;pointer-events:auto}
+  .led-lede{font-size:26px;fill:var(--ink);letter-spacing:.22em}
+  .led-sub{font-size:13px;fill:var(--faint);letter-spacing:.12em}
+  .led-item{font-size:19px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.04em}
+  .led-item.done{fill:var(--faint)}
+  .led-act{font-size:21px;fill:var(--ink);letter-spacing:.2em}
+  .led-hint{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  #bridge{opacity:0;pointer-events:none;transition:opacity 380ms ease}
+  #bridge.on{opacity:1;pointer-events:auto}
+  .br-lede{font-size:22px;fill:var(--ink);letter-spacing:.2em}
+  .br-body{font-size:16px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .br-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+
+  #boot{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+        justify-content:center;font-size:15px;color:var(--ink2);letter-spacing:.3em;z-index:9}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+
+<div id="boot">樟木箱底</div>
+
+<div id="app">
+  <svg id="stage" viewBox="0 0 1200 720" shape-rendering="geometricPrecision"
+       xmlns="http://www.w3.org/2000/svg" role="application" aria-label="典藏司樟木箱底 第十幕">
+    <defs>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="n"/>
+        <feColorMatrix in="n" type="saturate" values="0"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+    <g id="world">
+
+      <!-- ══════════════════ view-room：庫房深處（全景）══════════════════
+           同一台虚拟相机、同一斜率 k=0.5（§十二）。进深预算全部 ≤ 80（见样式表注释）。
+           庫房最深處那一具樟木箱合着 —— 箱底十道空槽，一槽承一幕之產出。 -->
+      <g id="view-room" class="view active">
+
+        <!-- ① 庫房地面（水平面）：遠邊在牆腳 y≈596，近邊落在画面之外 -->
+        <path class="floor" d="M40,596.4 C300,594.6 700,597.2 1160,595.6 L1160,726 L40,726 Z"/>
+        <path class="l3 miter" d="M150,664 C400,662.6 800,665 1090,662.8"/>
+        <path class="l3 miter" d="M1136,620 C1137.2,650 1136.4,674 1137,694"/>
+        <path class="l3 miter" d="M62,620 C61,650 61.8,674 61,694"/>
+        <!-- ② 墙脚交界 -->
+        <path class="l2" d="M40,596.6 C300,594.8 700,597.4 1160,595.8"/>
+
+        <!-- A 檐梁（一根旧木横梁）＋ 梁上悬下的旧绳 -->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 f-wood" d="M60,44.4 C420,42.6 800,45.2 1140,43.6 L1143,77.4 C800,79.2 420,76.6 60,78.4 Z"/>
+          <path class="l3" d="M60,61.4 C420,59.6 800,62.2 1140,60.6"/>
+          <path class="l3" d="M300,79.6 C298,150 298.6,240 297.4,300"/>
+        </g>
+
+        <!-- B 壁上「合卷體例」一纸（翻書可查；本幕自撰，非古籍引文）-->
+        <g id="hs_rule" class="hs on" data-hs="h_rule">
+          <rect class="hit" x="62" y="150" width="196" height="156"/>
+          <g class="art">
+            <path class="l1 f-card" d="M70,158.4 C124,156.6 196,159.2 248,157.6 L249,298.4 C196,300.2 124,297.6 70,299.4 Z"/>
+            <text class="tx-k" x="159" y="186" font-size="14" text-anchor="middle">合卷體例</text>
+            <path class="l3 miter" d="M86,212 L232,212 M86,238 L206,238 M86,264 L220,264"/>
+          </g>
+        </g>
+
+        <!-- C 壁上「十幕所產一覽」一纸（翻書可查：一槽一幕，逐幕對照）-->
+        <g id="hs_list" class="hs on" data-hs="h_list">
+          <rect class="hit" x="276" y="150" width="196" height="156"/>
+          <g class="art">
+            <path class="l1 f-card" d="M284,158.4 C338,156.6 410,159.2 462,157.6 L463,298.4 C410,300.2 338,297.6 284,299.4 Z"/>
+            <text class="tx-k" x="373" y="186" font-size="14" text-anchor="middle">十幕所產一覽</text>
+            <path class="l3 miter" d="M300,212 L446,212 M300,238 L420,238 M300,264 L434,264"/>
+          </g>
+        </g>
+
+        <!-- D 左首一具書架（架上是歷班留下的空函）-->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 f-wood" d="M62,334.4 C110,332.6 200,335.2 246,333.6 L248,594.4 C200,596.2 110,593.6 62,595.4 Z"/>
+          <path class="l1 miter" d="M76,348.4 C120,346.8 192,349.2 234,347.6 L235,580.4 C192,582.2 120,579.6 76,581.4 Z" fill="none"/>
+          <path class="l2 miter" d="M78,412 L233,412 M78,478 L233,478 M78,544 L233,544"/>
+          <path class="l3" d="M120,352 L120,578 M180,352 L180,578"/>
+          <path class="l1 f-card" d="M86,356.4 C118,354.8 156,357.2 186,355.6 L187,406.4 C156,408.2 118,405.6 86,407.4 Z"/>
+          <path class="l1 f-card" d="M92,418.4 C126,416.8 164,419.2 196,417.6 L197,470.4 C164,472.2 126,469.6 92,471.4 Z"/>
+          <path class="l1 f-card" d="M86,484.4 C118,482.8 156,485.2 186,483.6 L187,538.4 C156,540.2 118,537.6 86,539.4 Z"/>
+        </g>
+
+        <!-- E 左首那張案（銅匙就擱在案上）-->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 f-wood" d="M300,498.4 C368,496.6 448,499.2 512,497.6 L514,556.4 C448,558.2 368,555.6 300,557.4 Z"/>
+          <path class="l3 miter" d="M320,500 L320,556 M494,500 L494,556"/>
+          <path class="l1 f-wood" d="M316,556.4 C320,554.6 334,557.2 338,555.6 L339,596.4 C334,598.2 320,595.6 316,597.4 Z"/>
+          <path class="l1 f-wood" d="M476,556.4 C480,554.6 494,557.2 498,555.6 L499,596.4 C494,598.2 480,595.6 476,597.4 Z"/>
+          <path class="l2 miter" d="M300,556.6 C368,554.8 448,557.4 514,555.8"/>
+        </g>
+
+        <!-- F 樟木箱（合着；箱蓋頂面進深 18 → 帶高 9）-->
+        <g id="chest" class="scenery" pointer-events="none">
+          <g id="chest-lid">
+            <path class="slab" d="M556,405.4 C720,403.6 880,406.2 1004,404.6 L1004,414 L556,414 Z"/>
+            <path class="l1 f-wood" d="M552,414.4 C718,412.6 882,415.2 1008,413.6 L1008,428.4 C882,430.2 718,427.6 552,429.4 Z"/>
+          </g>
+          <g id="chest-mouth">
+            <path class="recess" d="M560,415.4 C720,413.6 878,416.2 1000,414.6 L1000,428 L560,428 Z"/>
+          </g>
+          <path class="l1 f-wood" d="M556,428.4 C720,426.6 880,429.2 1004,427.6 L1006,596.4 C880,598.2 720,595.6 556,597.4 Z"/>
+          <path class="l2 miter" d="M574,440 L988,440"/>
+          <path class="l3 miter" d="M602,446 L602,590 M960,446 L960,590"/>
+          <path class="l3 miter" d="M640,556 L922,556"/>
+          <text class="tx-k" x="780" y="486" font-size="17" text-anchor="middle">樟 木 箱</text>
+          <text class="tx-k" x="780" y="512" font-size="11" text-anchor="middle" fill="var(--faint)">箱底十道空槽</text>
+          <g id="chest-shut">
+            <path class="l2 miter" d="M766,414 L796,414 L796,436 L766,436 Z" fill="none"/>
+            <circle cx="781" cy="446" r="6" class="l2" fill="none"/>
+            <circle cx="858" cy="470" r="13" fill="var(--zhu)" opacity=".14"/>
+            <text class="tx-k" x="858" y="475" font-size="12" text-anchor="middle" fill="var(--zhu)">兩存</text>
+          </g>
+        </g>
+
+        <!-- G 箱上的銅搭扣（本幕第一件事：取匙挑開它）-->
+        <g id="hs_latch" class="hs on" data-hs="h_latch">
+          <rect class="hit" x="736" y="398" width="92" height="80"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M762,410.4 C776,408.6 792,411.2 802,409.6 L803,442.4 C792,444.2 776,441.6 762,443.4 Z"/>
+            <path class="l2 miter" d="M770,426 L796,426"/>
+            <path class="l2" d="M782,442.6 C782,450 782,454 781,459"/>
+            <circle cx="781" cy="464" r="5" class="l2" fill="none"/>
+          </g>
+        </g>
+
+        <!-- H 案上那支銅匙 -->
+        <g id="hs_key" class="hs on" data-hs="h_key">
+          <rect class="hit" x="328" y="440" width="124" height="84"/>
+          <g class="art">
+            <g id="key-stand">
+              <circle cx="356" cy="486" r="10" class="l2" fill="none"/>
+              <path class="l1 f-card" d="M366,480.4 C400,478.6 428,481.2 452,479.6 L452,492.4 C428,494.2 400,491.6 366,493.4 Z"/>
+              <path class="l2 miter" d="M404,480 L404,468 M422,480 L422,470 M440,480 L440,469"/>
+            </g>
+            <text class="tx-k" x="410" y="524" font-size="12" text-anchor="middle" fill="var(--ink2)">銅 匙</text>
+          </g>
+        </g>
+
+        <!-- I 走近樟木箱（進箱底近景；熱區罩住箱前那一整片）-->
+        <g id="hs_go" class="hs on" data-hs="h_go">
+          <rect class="hit" x="600" y="606" width="380" height="84"/>
+          <g class="art">
+            <path class="l1 miter" d="M610,616 C720,614.4 862,617 970,615.4 L970,660.4 C862,662.2 720,659.6 610,661.4 Z" fill="none"/>
+          </g>
+          <text class="led-act" x="790" y="646" text-anchor="middle" font-size="17">走 近 樟 木 箱</text>
+        </g>
+
+        <!-- J 箱底那塊朱印（錯法累到三次才出現；一塊 12% 朱砂，不是新色）-->
+        <g id="prints" pointer-events="none">
+          <ellipse cx="640" cy="700" rx="17" ry="23" fill="var(--zhu)" opacity=".12"/>
+          <ellipse cx="670" cy="706" rx="12" ry="17" fill="var(--zhu)" opacity=".12"/>
+        </g>
+
+        <!-- 接觸影（唯一一层阴影：贴底 8% 墨、無方向性、每處一層）-->
+        <rect class="shadow" x="66" y="592" width="182" height="7" rx="3"/>
+        <rect class="shadow" x="304" y="596" width="206" height="7" rx="3"/>
+        <rect class="shadow" x="560" y="596" width="442" height="7" rx="3"/>
+      </g>
+
+      <!-- ══════════════════ view-close：箱底近景（十道空槽 / 簏 / 無名封皮 / 銅鎖 / 印）══════════════════ -->
+      <g id="view-close" class="view">
+
+        <!-- A 掀起的箱蓋（靠在後方）與箱內壁 -->
+        <path class="l1 f-wood" d="M40,96.4 C300,94.6 620,97.2 800,95.6 L802,152.4 C620,154.2 300,151.6 40,153.4 Z"/>
+        <path class="l3 miter" d="M60,112 L780,110.6 M60,134 L780,132.6"/>
+        <path class="recess" d="M56,150.4 C300,148.6 620,151.2 784,149.6 L784,300 L56,300 Z"/>
+        <path class="l2 miter" d="M56,150.6 C300,148.8 620,151.4 784,149.8"/>
+        <path class="l3 miter" d="M300,152 L300,298 M520,152 L520,298"/>
+
+        <!-- B 箱底（水平面，進深 24 → 帶高 12）：十道空槽就開在這一片上 -->
+        <path class="slab" d="M56,300.4 C300,298.6 620,301.2 784,299.6 L784,626.4 C620,628.2 300,625.6 56,627.4 Z"/>
+
+        <!-- C 十道空槽（一槽一幕）—— 手寫的一組圖元，坐標寫死 -->
+        <g id="slot-1" class="hs on" data-hs="h_slot1">
+          <rect class="hit" x="63" y="330" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M66,332.4 C104,330.6 156,333.2 190,331.6 L191,443.4 C156,445.2 104,442.6 66,444.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="128" y="358" font-size="13" text-anchor="middle" fill="var(--ink2)">一 · 校書閣</text>
+            <g class="mark">
+              <circle cx="112" cy="410" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="142" y="415" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-2" class="hs on" data-hs="h_slot2">
+          <rect class="hit" x="207" y="330" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M210,332.4 C248,330.6 300,333.2 334,331.6 L335,443.4 C300,445.2 248,442.6 210,444.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="272" y="358" font-size="13" text-anchor="middle" fill="var(--ink2)">二 · 熔銅作</text>
+            <g class="mark">
+              <circle cx="256" cy="410" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="286" y="415" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-3" class="hs on" data-hs="h_slot3">
+          <rect class="hit" x="351" y="330" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M354,332.4 C392,330.6 444,333.2 478,331.6 L479,443.4 C444,445.2 392,442.6 354,444.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="416" y="358" font-size="13" text-anchor="middle" fill="var(--ink2)">三 · 校書堂</text>
+            <g class="mark">
+              <circle cx="400" cy="410" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="430" y="415" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-4" class="hs on" data-hs="h_slot4">
+          <rect class="hit" x="495" y="330" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M498,332.4 C536,330.6 588,333.2 622,331.6 L623,443.4 C588,445.2 536,442.6 498,444.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="560" y="358" font-size="12" text-anchor="middle" fill="var(--ink2)">四 · 書庫走廊</text>
+            <g class="mark">
+              <circle cx="544" cy="410" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="574" y="415" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-5" class="hs on" data-hs="h_slot5">
+          <rect class="hit" x="639" y="330" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M642,332.4 C680,330.6 732,333.2 766,331.6 L767,443.4 C732,445.2 680,442.6 642,444.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="704" y="358" font-size="13" text-anchor="middle" fill="var(--ink2)">五 · 膳房</text>
+            <g class="mark">
+              <circle cx="688" cy="410" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="718" y="415" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-6" class="hs on" data-hs="h_slot6">
+          <rect class="hit" x="63" y="466" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M66,468.4 C104,466.6 156,469.2 190,467.6 L191,579.4 C156,581.2 104,578.6 66,580.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="128" y="494" font-size="13" text-anchor="middle" fill="var(--ink2)">六 · 類書庫</text>
+            <g class="mark">
+              <circle cx="112" cy="546" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="142" y="551" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-7" class="hs on" data-hs="h_slot7">
+          <rect class="hit" x="207" y="466" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M210,468.4 C248,466.6 300,469.2 334,467.6 L335,579.4 C300,581.2 248,578.6 210,580.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="272" y="494" font-size="13" text-anchor="middle" fill="var(--ink2)">七 · 抄書齋</text>
+            <g class="mark">
+              <circle cx="256" cy="546" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="286" y="551" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-8" class="hs on" data-hs="h_slot8">
+          <rect class="hit" x="351" y="466" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M354,468.4 C392,466.6 444,469.2 478,467.6 L479,579.4 C444,581.2 392,578.6 354,580.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="416" y="494" font-size="13" text-anchor="middle" fill="var(--ink2)">八 · 塔院</text>
+            <g class="mark">
+              <circle cx="400" cy="546" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="430" y="551" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-9" class="hs on" data-hs="h_slot9">
+          <rect class="hit" x="495" y="466" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M498,468.4 C536,466.6 588,469.2 622,467.6 L623,579.4 C588,581.2 536,578.6 498,580.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="560" y="494" font-size="13" text-anchor="middle" fill="var(--ink2)">九 · 藏書閣</text>
+            <g class="mark">
+              <circle cx="544" cy="546" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="574" y="551" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+        <g id="slot-10" class="hs on" data-hs="h_slot10">
+          <rect class="hit" x="639" y="466" width="130" height="116"/>
+          <g class="art">
+            <path class="l2 miter" d="M642,468.4 C680,466.6 732,469.2 766,467.6 L767,579.4 C732,581.2 680,578.6 642,580.4 Z" style="fill:var(--paper2)"/>
+            <text class="tx-k" x="704" y="494" font-size="13" text-anchor="middle" fill="var(--ink2)">十 · 樟木箱底</text>
+            <text class="tx-k" x="704" y="514" font-size="10" text-anchor="middle" fill="var(--faint)">無字之卷</text>
+            <g class="mark">
+              <circle cx="688" cy="546" r="5" fill="var(--zhu)"/>
+              <text class="tx-k" x="718" y="551" font-size="13" text-anchor="middle" fill="var(--zhu)">已歸</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- D 案右首那只簏（九枚歸卷牌都盛在裡頭，取一枚少一枚）-->
+        <g id="hs_basket" class="hs on" data-hs="h_basket">
+          <rect class="hit" x="824" y="296" width="156" height="182"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M832,318.4 C866,316.6 914,319.2 952,317.6 L954,438.4 C914,440.2 866,437.6 832,439.4 Z"/>
+            <path class="l1 miter" d="M844,330.4 C876,328.8 912,331.2 942,329.6 L943,428.4 C912,430.2 876,427.6 844,429.4 Z" fill="none"/>
+            <path class="l3 miter" d="M836,352 L950,352 M836,380 L950,380 M836,408 L950,408"/>
+            <path class="l1 f-card" d="M852,300.4 C872,298.8 902,301.2 922,299.6 L923,320.4 C902,322.2 872,319.6 852,321.4 Z"/>
+            <path class="l2" d="M872,318 L872,300 M892,318 L892,298 M912,318 L912,300"/>
+            <text class="tx-k" x="892" y="466" font-size="12" text-anchor="middle" fill="var(--ink2)">簏 · 歸卷牌</text>
+            <text class="tx-z" id="basket-n" x="892" y="490" font-size="14" text-anchor="middle">簏中尚有三牌</text>
+          </g>
+        </g>
+
+        <!-- E 案右首那一卷無名封皮（第一幕暗格裡那一卷；本幕在箱子夾層裡又拿到）-->
+        <g id="hs_cover" class="hs on" data-hs="h_cover">
+          <rect class="hit" x="990" y="296" width="146" height="146"/>
+          <g class="art">
+            <g id="cover-stand">
+              <path class="l1 f-card" d="M1008,300.4 C1052,298.6 1096,301.2 1128,299.6 L1130,376.4 C1096,378.2 1052,375.6 1008,377.4 Z"/>
+              <path class="l1 f-wood" d="M1000,300.4 C1008,298.6 1016,301.2 1024,299.6 L1026,377.4 C1016,379.2 1008,376.6 1000,378.4 Z"/>
+              <path class="l3 miter" d="M1030,302 L1030,376 M1052,302 L1052,376 M1074,302 L1074,376 M1096,302 L1096,376"/>
+            </g>
+            <text class="tx-k" x="1062" y="400" font-size="12" text-anchor="middle" fill="var(--ink2)">無名封皮一卷</text>
+            <text class="tx-k" x="1062" y="420" font-size="10" text-anchor="middle" fill="var(--faint)">第一卷 · 無字</text>
+          </g>
+        </g>
+
+        <!-- F 案右首那具銅鎖 -->
+        <g id="hs_lock" class="hs on" data-hs="h_lock">
+          <rect class="hit" x="824" y="500" width="156" height="120"/>
+          <g class="art">
+            <g id="lock-stand">
+              <path class="l1 f-wood" d="M862,540.4 C888,538.6 918,541.2 940,539.6 L941,586.4 C918,588.2 888,585.6 862,587.4 Z"/>
+              <path class="l2" d="M886,540.6 C884,528 890,516 901,514 C912,512 918,522 917,540"/>
+              <circle cx="901" cy="556" r="6" class="l2" fill="none"/>
+            </g>
+            <text class="tx-k" x="892" y="612" font-size="12" text-anchor="middle" fill="var(--ink2)">銅 鎖</text>
+          </g>
+        </g>
+
+        <!-- G 案右首那一方印 -->
+        <g id="hs_seal" class="hs on" data-hs="h_seal">
+          <rect class="hit" x="990" y="456" width="146" height="152"/>
+          <g class="art">
+            <g id="seal-stand">
+              <path class="l1 f-wood" d="M1012,524.4 C1036,522.6 1064,525.2 1084,523.6 L1085,576.4 C1064,578.2 1036,575.6 1012,577.4 Z"/>
+              <path class="l1 miter" d="M1060,512.4 C1066,510.6 1072,513.2 1076,511.6 L1077,526.4 C1072,528.2 1066,525.6 1060,527.4 Z" fill="none"/>
+              <path class="l1 f-wood" d="M1020,488.4 C1042,486.6 1066,489.2 1080,487.6 L1081,526.4 C1066,528.2 1042,525.6 1020,527.4 Z"/>
+            </g>
+            <text class="tx-k" x="1048" y="602" font-size="12" text-anchor="middle" fill="var(--ink2)">印</text>
+          </g>
+        </g>
+
+        <!-- H 箱前沿（手空時＝合蓋；手上有鎖＝落鎖；手上有印＝落印）-->
+        <g id="hs_shut" class="hs on" data-hs="h_shut">
+          <rect class="hit" x="60" y="632" width="700" height="46"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M40,626.4 C300,624.6 620,627.2 800,625.6 L802,668.4 C620,670.2 300,667.6 40,669.4 Z"/>
+            <path class="l2 miter" d="M40,626.6 C300,624.8 620,627.4 800,625.8"/>
+          </g>
+          <text class="led-act" x="400" y="656" text-anchor="middle" font-size="15">合 蓋 · 落 鎖 · 落 印</text>
+        </g>
+
+        <!-- I 箱蓋落下（合卷）—— 擺在十槽與四件物之後，故蓋得住 -->
+        <g id="lid-down" pointer-events="none">
+          <path class="l1 f-wood" d="M40,96.4 C300,94.6 620,97.2 800,95.6 L802,660.4 C620,662.2 300,659.6 40,661.4 Z"/>
+          <path class="l1 miter" d="M64,118.4 C300,116.8 620,119.2 778,117.6 L780,640.4 C620,642.2 300,639.6 64,641.4 Z" fill="none"/>
+          <path class="l3 miter" d="M64,180 L780,178.6 M64,560 L780,558.6"/>
+          <text class="tx-k" x="420" y="300" font-size="20" text-anchor="middle">樟 木 箱</text>
+          <text class="tx-k" x="420" y="332" font-size="12" text-anchor="middle" fill="var(--faint)">箱底十道槽，十幕之產出，皆在箱中</text>
+          <g id="lid-lock">
+            <path class="l2 miter" d="M392,388 C390,374 398,362 410,360 C422,358 430,370 428,390"/>
+            <path class="l1 f-wood" d="M392,388.4 C404,386.6 420,389.2 432,387.6 L433,442.4 C420,444.2 404,441.6 392,443.4 Z"/>
+            <circle cx="413" cy="412" r="6" class="l2" fill="none"/>
+            <text class="tx-k" x="413" y="466" font-size="12" text-anchor="middle" fill="var(--ink2)">合卷</text>
+          </g>
+          <g id="lid-seal">
+            <circle cx="500" cy="416" r="19" fill="var(--zhu)" opacity=".14"/>
+            <text class="tx-k" x="500" y="423" font-size="16" text-anchor="middle" fill="var(--zhu)">兩存</text>
+          </g>
+        </g>
+
+        <!-- J 回庫中（近景的出口；也是真实 .hit）-->
+        <g id="hs_close_back" class="hs on" data-hs="h_close_back">
+          <rect class="hit" x="1024" y="634" width="132" height="72"/>
+          <g class="art"><path class="l1 miter" d="M1030,640 L1148,640 L1148,700 L1030,700 Z" fill="none"/></g>
+          <text class="led-act" x="1089" y="680" text-anchor="middle" font-size="15">回庫中</text>
+        </g>
+
+        <!-- K 錯法：牌順箱底滑回（現場變化，牌仍在手上、可立即重放）-->
+        <g id="tag-ghost" pointer-events="none">
+          <path class="l1 f-card" d="M0,0.4 C30,-1.4 66,1.2 96,-0.4 L96,38.4 C66,40.2 30,37.6 0,39.4 Z"/>
+        </g>
+        <!-- L 箱底那塊朱印（錯法累到三次才出現）-->
+        <g id="prints2" pointer-events="none">
+          <ellipse cx="418" cy="600" rx="17" ry="23" fill="var(--zhu)" opacity=".12"/>
+          <ellipse cx="448" cy="606" rx="12" ry="17" fill="var(--zhu)" opacity=".12"/>
+        </g>
+
+        <!-- 接觸影 -->
+        <rect class="shadow" x="48" y="620" width="736" height="6" rx="3"/>
+        <rect class="shadow" x="830" y="438" width="130" height="6" rx="3"/>
+        <rect class="shadow" x="996" y="376" width="140" height="6" rx="3"/>
+        <rect class="shadow" x="858" y="586" width="90" height="6" rx="3"/>
+        <rect class="shadow" x="1008" y="576" width="82" height="6" rx="3"/>
+      </g>
+
+      <!-- 噪點層：微粒只由這一處發出（全文件別無第二處），擺在兩個視圖之後、
+           覆蓋層之前 —— 全景與近景都有顆粒，台账與紙仍舊清清楚楚 -->
+      <rect x="0" y="0" width="1200" height="720" filter="url(#grain)" fill="none"
+            opacity="0.045" style="mix-blend-mode:multiply" pointer-events="none"/>
+
+      <!-- ══════════════════ 值房台账（幕间切换的枢纽）══════════════════ -->
+      <g id="ledger" class="on">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-wood" d="M262,92.4 C480,90.6 720,93.2 938,91.6 L940,628.4 C720,630.2 480,627.6 262,629.4 Z"/>
+          <path class="l1 f-card" d="M286,116.4 C480,114.8 720,117.2 914,115.6 L916,604.4 C720,606.2 480,603.6 286,605.4 Z"/>
+          <path class="l2" d="M300,196 C480,194.4 720,197 900,195.4"/>
+          <path class="l2" d="M300,448 C480,446.4 720,449 900,447.4"/>
+        </g>
+        <text class="led-lede" x="600" y="160" text-anchor="middle">值房 · 今日差事</text>
+        <text class="led-sub" x="600" y="182" text-anchor="middle">典藏司 樟木箱底 · 夜直（第十幕）</text>
+
+        <g id="led-items">
+          <circle id="led-dot-1" class="l2" cx="356" cy="248" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-1" x="390" y="255">樟木箱合着 —— 案上取匙，挑開箱上那一道銅搭扣</text>
+          <circle id="led-dot-2" class="l2" cx="356" cy="322" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-2" x="390" y="329">箱底十道空槽 —— 九牌與那一卷無名封皮，各歸其槽</text>
+          <circle id="led-dot-3" class="l2" cx="356" cy="396" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-3" x="390" y="403">十槽既滿 —— 合蓋、落鎖、落印：全劇合卷</text>
+        </g>
+
+        <g class="hs on" data-hs="h_ledger_enter">
+          <rect class="hit" x="330" y="470" width="540" height="72"/>
+          <g class="art"><path class="l1 miter" d="M336,476 L864,476 L864,536 L336,536 Z" fill="none"/></g>
+          <text class="led-act" x="600" y="518" text-anchor="middle">推 門 入 庫</text>
+        </g>
+        <g id="hs_led_bridge" class="hs on" data-hs="h_ledger_bridge">
+          <rect class="hit" x="330" y="548" width="320" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M336,554 L644,554 L644,602 L336,602 Z" fill="none"/>
+            <text class="led-act" x="490" y="586" text-anchor="middle" font-size="15">幕間：上一幕交下來的話</text>
+          </g>
+        </g>
+        <g id="hs_led_notes" class="hs on gone" data-hs="h_ledger_notes">
+          <rect class="hit" x="664" y="548" width="206" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M670,554 L864,554 L864,602 L670,602 Z" fill="none"/>
+            <text class="led-act" x="767" y="586" text-anchor="middle" font-size="15">取 閱 校 勘 記</text>
+          </g>
+        </g>
+        <text class="led-hint" id="led-hint" x="600" y="668" text-anchor="middle">箱裡沒有題目 —— 只有十道空槽、九枚歸卷牌、一卷無名封皮。</text>
+      </g>
+
+      <!-- ══════════════════ 幕间过渡页（跨幕累积的载体）══════════════════ -->
+      <g id="bridge">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-card" d="M312,132.4 C520,130.6 720,133.2 896,131.6 L898,588.4
+            C720,590.2 520,587.6 312,589.4 Z"/>
+          <path class="l1 f-wood" d="M330,112.4 C520,110.6 720,113.2 878,111.6 L880,140.4
+            C720,142.2 520,139.6 330,141.4 Z"/>
+        </g>
+        <text class="br-lede" x="600" y="188" text-anchor="middle">幕 間 · 藏書閣 → 樟木箱底</text>
+        <text class="br-sub" x="600" y="212" text-anchor="middle">典藏司 夜直 第十班</text>
+        <g id="bridge-lines"></g>
+        <g class="hs on" data-hs="h_bridge_go">
+          <rect class="hit" x="470" y="530" width="260" height="62"/>
+          <g class="art"><path class="l1 miter" d="M476,536 L724,536 L724,586 L476,586 Z" fill="none"/></g>
+          <text class="led-act" x="600" y="572" text-anchor="middle" font-size="19">收 起 · 進 樟 木 箱 底</text>
+        </g>
+        <g class="hs on" data-hs="h_bridge_back">
+          <rect class="hit" x="132" y="530" width="200" height="62"/>
+          <g class="art"><path class="l1 miter" d="M138,536 L326,536 L326,586 L138,586 Z" fill="none"/></g>
+          <text class="led-act" x="232" y="572" text-anchor="middle" font-size="17">回 台 賬</text>
+        </g>
+      </g>
+
+      <!-- ══════════════════ 纸：在场景内放大展开 ══════════════════ -->
+      <g id="paper-layer"></g>
+
+      <!-- 声 / 簿 -->
+      <g id="snd" style="cursor:pointer">
+        <rect x="1136" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1158" y="50" font-size="19" text-anchor="middle">聲</text>
+      </g>
+      <g id="bk" style="cursor:pointer">
+        <rect x="1084" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1106" y="50" font-size="19" text-anchor="middle">簿</text>
+      </g>
+    </g>
+  </svg>
+
+  <div id="hud">
+    <div id="slots"></div>
+    <div id="caption"></div>
+  </div>
+</div>
+
+<svg id="symdefs" width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="symroot"></defs></svg>
+
+<script>
+"use strict";
+(function(){
+
+/* ══ 0. 存档：与第一–九幕同一把钥匙、同一结构（幕间协议 §1.3）════════════
+   本幕（第十幕 · 終幕）写：act=10，往 done 追加 "act10"，《校勘记》追加本幕条目。
+   **只加不改**：不改键名、不改任何既有字段的语义、不写迁移脚本。
+   **本幕只往 inv 里放「本幕自己给得出的东西」**（銅匙、九枚歸卷牌、無名封皮、銅鎖、印），
+   不假设「玩家还持有上一幕的物件」——第一幕暗格裡那一卷，本幕在箱子夾層裡又拿到一次。 */
+var SAVE_KEY = "diandangsi.rustylake.v1";
+var NOTES_KEY = "diandangsi.rustylake.v1.notes";
+var ACT_NO = 10, ACT_ID = "act10";
+
+/* ══ 1. 上一幕交下来的东西（跨幕累积的读入侧）════════════════════════
+   读不到就是 null —— **照实说「沒讀到」，不假装办过**（协议 §1.3.3）。 */
+var PREV = (function(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return null;
+    return o;
+  }catch(e){ return null; }
+})();
+function prevHas(k){ return !!(PREV && PREV.f && PREV.f[k]); }
+function prevRead(k){ return !!(PREV && PREV.read && PREV.read.indexOf(k) >= 0); }
+function prevDone(id){ return !!(PREV && PREV.done && PREV.done.indexOf && PREV.done.indexOf(id) >= 0); }
+
+/* ══ 2. flags ═══════════════════════════════════════════════════════ */
+var FLAG_KEYS = [
+  "f_seen_act10","f_bridge_read","f_rule_read","f_list_read","f_close_entered",
+  "f_key_taken","f_lid_open",
+  "f_slot1_filled","f_slot2_filled","f_slot3_filled","f_slot4_filled","f_slot5_filled",
+  "f_slot6_filled","f_slot7_filled","f_slot8_filled","f_slot9_filled","f_slot10_filled",
+  "f_slots_full","f_lid_shut","f_lock_taken","f_locked","f_seal_taken","f_sealed",
+  "f_act10_done"
+];
+var F = {}, INV = [], READ = [], SEL = null, CAM = "room";
+
+function resetState(){
+  F = {}; FLAG_KEYS.forEach(function(k){ F[k]=false; });
+  F.f_misplaced_count = 0;      /* 与第一–九幕同名同义：错的次数 */
+  INV = []; READ = []; SEL = null; CAM = "room";
+}
+
+/* ══ 3. 存读档（幕间协议 §1.3：只加字段，不改字段语义，不改键名）══════ */
+var saveT = null;
+var DONE = (PREV && PREV.done && PREV.done.slice) ? PREV.done.slice() : [];
+var NOTE_LOG = (PREV && PREV.notes && PREV.notes.slice) ? PREV.notes.slice() : [];
+function markActDone(){
+  if(F.f_act10_done && DONE.indexOf(ACT_ID) < 0) DONE.push(ACT_ID);
+}
+function appendNotes(){
+  var es = noteEntries();
+  for(var i=0;i<es.length;i++){
+    var key = ACT_NO + "|" + es[i].h;
+    var has = false;
+    for(var j=0;j<NOTE_LOG.length;j++){ if(NOTE_LOG[j].key === key){ has = true; break; } }
+    if(!has) NOTE_LOG.push({ key:key, act:ACT_NO, h:es[i].h, l:es[i].l });
+  }
+}
+function saveNow(){
+  try{
+    markActDone(); appendNotes();
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      f:F, inv:INV, read:READ, cam:CAM, ts:Date.now(),
+      act:ACT_NO, done:DONE, notes:NOTE_LOG
+    }));
+  }catch(e){}
+}
+function saveDebounced(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
+function load(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return false;
+    FLAG_KEYS.forEach(function(k){ if(k in o.f) F[k]=o.f[k]; });
+    if(typeof o.f.f_misplaced_count === "number") F.f_misplaced_count = o.f.f_misplaced_count;
+    INV = o.inv || []; READ = o.read || []; CAM = o.cam || "room";
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ══ 4. DOM ═════════════════════════════════════════════════════════ */
+var $ = function(s){ return document.querySelector(s); };
+var stage = $("#stage"), world = $("#world"), paperLayer = $("#paper-layer");
+var caption = $("#caption"), slotsEl = $("#slots");
+function el(tag, attrs){ var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  if(attrs) for(var k in attrs) n.setAttribute(k, attrs[k]); return n; }
+function txt(cls, x, y, s, extra){
+  var t = el("text", { "class":cls, x:x, y:y });
+  if(extra) for(var k in extra) t.setAttribute(k, extra[k]);
+  t.textContent = s; return t;
+}
+
+/* ══ 5. 视图（本幕 2 个：room 庫房全景 / close 箱底近景）═══════════════ */
+function setCam(which){
+  CAM = which;
+  world.dataset.cam = which;
+  document.querySelectorAll(".view").forEach(function(v){
+    v.classList.toggle("active", v.id === "view-" + which);
+  });
+  applyArmed();
+}
+function goRoom(){ setCam("room"); }
+function goClose(){ setCam("close"); }
+
+/* ══ 6. 十幕的表（一槽一幕；這一幕的素材不是新引文，是前九幕的產出）══════
+   十幕的名、產出、以及「歸卷牌上那兩個字」，全在壁上《十幕所產一覽》那一紙上。*/
+var TEN = [
+  { act:1,  no:"一", name:"校書閣",   key:"荼 ／ 茶",           out:"荼 ／ 茶 ·《釋名》三物 · 卷五兩數" },
+  { act:2,  no:"二", name:"熔銅作",   key:"牡 ／ 牝",           out:"牡 ／ 牝 · 辱金不入爐" },
+  { act:3,  no:"三", name:"校書堂",   key:"遍 ／ 徧",           out:"遍 ／ 徧 · 雌黃滅誤以紙色爲斷" },
+  { act:4,  no:"四", name:"書庫走廊", key:"三紙 ／ 三張",       out:"三紙 ／ 三張 · 博士買驢" },
+  { act:5,  no:"五", name:"膳房",     key:"勞 ／ 蟧",           out:"勞 ／ 蟧 · 三物以大小分置三盆" },
+  { act:6,  no:"六", name:"類書庫",   key:"因 ／ 同",           out:"因 ／ 同 · 御覽八六五 ／ 書鈔一四六" },
+  { act:7,  no:"七", name:"抄書齋",   key:"申 ／ 分",           out:"申 ／ 分 · 四處異文各歸增改刪" },
+  { act:8,  no:"八", name:"塔院",     key:"十三級 ／ 十五重",   out:"十三級 ／ 十五重 · 槃 ／ 盤" },
+  { act:9,  no:"九", name:"藏書閣",   key:"異文錄 ／ 五門八條", out:"異文錄 · 五門八條兩存" },
+  { act:10, no:"十", name:"樟木箱底", key:"（無字）",           out:"第一卷無名封皮" }
+];
+/* 簏中出牌的固定次序（九牌；第十槽歸那一卷無名封皮）—— 寫死，故走通可复现 */
+var ORD = [5,2,9,1,7,3,8,4,6];
+function tenOf(n){
+  for(var i=0;i<TEN.length;i++){ if(TEN[i].act === n) return TEN[i]; }
+  return null;
+}
+function tagNoOf(id){
+  var m = /^it_tag([1-9])$/.exec(String(id||""));
+  return m ? parseInt(m[1],10) : 0;
+}
+function slotsFilled(){
+  var n = 0;
+  for(var i=1;i<=10;i++){ if(F["f_slot"+i+"_filled"]) n++; }
+  return n;
+}
+function allSlotsFilled(){ return slotsFilled() === 10; }
+/* 簏中下一枚該出的牌：ORD 裡第一個「既未歸槽、也不在手上」的 */
+function nextTagNo(){
+  for(var i=0;i<ORD.length;i++){
+    var n = ORD[i];
+    if(F["f_slot"+n+"_filled"]) continue;
+    if(INV.indexOf("it_tag"+n) >= 0) continue;
+    return n;
+  }
+  return 0;
+}
+function basketLeft(){
+  var n = 0;
+  for(var i=0;i<ORD.length;i++){
+    var t = ORD[i];
+    if(F["f_slot"+t+"_filled"]) continue;
+    if(INV.indexOf("it_tag"+t) >= 0) continue;
+    n++;
+  }
+  return n;
+}
+
+/* ══ 7. 物件表 + 物品栏 symbol（九牌 ＋ 封皮 ＋ 匙／鎖／印，圖形各一，复用 <use>）═══ */
+var ITEMS = {};
+(function(){
+  for(var i=0;i<TEN.length;i++){
+    var t = TEN[i];
+    if(t.act === 10) continue;
+    ITEMS["it_tag" + t.act] = { n:"歸卷牌 · " + t.name, sym:"sym_tag" + t.act, box:[-4,0,108,104] };
+  }
+  ITEMS.it_cover = { n:"無名封皮一卷", sym:"sym_cover", box:[-8,0,116,104] };
+  ITEMS.it_key   = { n:"銅匙",         sym:"sym_key",   box:[-8,0,116,104] };
+  ITEMS.it_lock  = { n:"銅鎖",         sym:"sym_lock",  box:[-8,0,116,104] };
+  ITEMS.it_seal  = { n:"印",           sym:"sym_seal",  box:[-8,0,116,104] };
+})();
+function buildSymbols(){
+  var root = $("#symroot");
+  TEN.forEach(function(t){
+    if(t.act === 10) return;
+    var s = el("symbol", { id:"sym_tag" + t.act, viewBox:"0 0 100 100" });
+    s.appendChild(el("path", { "class":"l1 f-card", d:"M14,10.4 L86,9.6 L87,88.4 L15,89.2 Z" }));
+    var parts = t.key.split(" ／ ");
+    s.appendChild(txt("tx-k", 50, 42, parts[0], { "font-size":20, "text-anchor":"middle" }));
+    s.appendChild(txt("tx-k", 50, 64, "／", { "font-size":13, "text-anchor":"middle" }));
+    s.appendChild(txt("tx-k", 50, 84, parts[1], { "font-size":20, "text-anchor":"middle" }));
+    root.appendChild(s);
+  });
+  var c = el("symbol", { id:"sym_cover", viewBox:"0 0 100 100" });
+  c.appendChild(el("path", { "class":"l1 f-card", d:"M18,24.4 L82,23.6 L83,78.4 L19,79.2 Z" }));
+  c.appendChild(el("path", { "class":"l1 f-wood", d:"M12,24.4 L20,23.6 L21,79.2 L13,80.4 Z" }));
+  c.appendChild(el("path", { "class":"l3 miter", d:"M32,26 L32,78 M48,26 L48,78 M64,26 L64,78" }));
+  root.appendChild(c);
+  var k = el("symbol", { id:"sym_key", viewBox:"0 0 100 100" });
+  k.appendChild(el("circle", { cx:"24", cy:"62", r:"14", "class":"l2", fill:"none" }));
+  k.appendChild(el("path", { "class":"l1 f-card", d:"M38,56.4 L84,55.6 L84,68.4 L38,69.4 Z" }));
+  k.appendChild(el("path", { "class":"l2 miter", d:"M58,56 L58,44 M72,56 L72,46" }));
+  root.appendChild(k);
+  var l = el("symbol", { id:"sym_lock", viewBox:"0 0 100 100" });
+  l.appendChild(el("path", { "class":"l2", d:"M30,44 C28,26 38,14 50,13 C62,12 72,24 70,44" }));
+  l.appendChild(el("path", { "class":"l1 f-wood", d:"M22,44.4 L78,43.6 L79,86.4 L23,87.4 Z" }));
+  l.appendChild(el("circle", { cx:"50", cy:"62", r:"7", "class":"l2", fill:"none" }));
+  root.appendChild(l);
+  var e2 = el("symbol", { id:"sym_seal", viewBox:"0 0 100 100" });
+  e2.appendChild(el("path", { "class":"l1 f-wood", d:"M22,50.4 L78,49.6 L79,86.4 L23,87.4 Z" }));
+  e2.appendChild(el("path", { "class":"l1 miter", d:"M58,18.4 L74,17.6 L75,51.4 L59,52.4 Z" }));
+  root.appendChild(e2);
+}
+
+/* ══ 8. 物品栏 ═══════════════════════════════════════════════════════ */
+function give(id){ if(INV.indexOf(id) < 0) INV.push(id); renderInv(); applyArmed(); saveDebounced(); }
+function take(id){ var i = INV.indexOf(id); if(i >= 0){ INV.splice(i,1); if(SEL===id) SEL=null; renderInv(); applyArmed(); saveDebounced(); } }
+function renderInv(){
+  slotsEl.innerHTML = "";
+  for(var i=0;i<INV.length;i++){
+    var id = INV[i], it = ITEMS[id]; if(!it) continue;
+    var d = document.createElement("div");
+    d.className = "slot has" + (SEL===id ? " sel" : "");
+    d.setAttribute("data-slot", i);
+    var box = it.box;
+    d.innerHTML = '<svg viewBox="'+box[0]+' '+box[1]+' '+box[2]+' '+box[3]+'" preserveAspectRatio="xMidYMid meet">'
+      + '<use href="#'+it.sym+'"/></svg><span class="under"></span>';
+    (function(id2){
+      d.addEventListener("click", function(e){
+        e.stopPropagation();
+        if(SEL === id2){ SEL = null; }
+        else { SEL = id2; say("取「"+ITEMS[id2].n+"」在手 —— 看它該歸哪一槽。", false, 3200); }
+        renderInv(); applyArmed(); render(); saveDebounced();
+      });
+    })(id);
+    slotsEl.appendChild(d);
+  }
+}
+
+/* ══ 9. 可用热点加粗（持有对应物件时立刻加粗）════════════════════════ */
+var SLOTALL = ["h_slot1","h_slot2","h_slot3","h_slot4","h_slot5",
+               "h_slot6","h_slot7","h_slot8","h_slot9","h_slot10"];
+var USE = {
+  it_key:   { view:["room"],  hs:["h_latch"] },
+  it_cover: { view:["close"], hs:["h_slot10"] },
+  it_lock:  { view:["close"], hs:["h_shut"] },
+  it_seal:  { view:["close"], hs:["h_shut"] }
+};
+(function(){
+  for(var i=1;i<=9;i++){ USE["it_tag"+i] = { view:["close"], hs:SLOTALL }; }
+})();
+function applyArmed(){
+  document.querySelectorAll(".hs.armed").forEach(function(n){ n.classList.remove("armed"); });
+  if(!SEL) return;
+  var u = USE[SEL]; if(!u) return;
+  if(u.view.indexOf(CAM) < 0) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")) n.classList.add("armed");
+  });
+}
+
+/* ══ 10. 音效（可选；WebAudio 合成，不引音频文件）═══════════════════ */
+var AC = null, SND = true;
+function sfx(kind){
+  if(!SND) return;
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    var f = kind==="wood"?150 : kind==="board"?260 : kind==="leaf"?300 : 200;
+    o.type = "sine";
+    o.frequency.value = f;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(AC.destination);
+    g.gain.exponentialRampToValueAtTime(0.06, t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.24);
+    o.start(t); o.stop(t+0.26);
+  }catch(e){}
+}
+$("#snd").addEventListener("click", function(e){
+  e.stopPropagation(); SND = !SND;
+  say(SND ? "聲 · 開" : "聲 · 閉", false, 1200);
+  try{ localStorage.setItem("diandangsi.rustylake.settings", JSON.stringify({snd:SND})); }catch(e2){}
+});
+
+/* ══ 11. 环境文字（不是题目框）：只指方位，不给内容，不出判语 ════════ */
+var capT = null;
+function say(t, zhu, ms){
+  caption.textContent = t;
+  caption.classList.toggle("zhu", !!zhu);
+  caption.classList.add("on");
+  clearTimeout(capT);
+  if(ms !== 0) capT = setTimeout(function(){ caption.classList.remove("on"); }, ms||2600);
+}
+
+/* ══ 12. 值房台账（幕间切换的枢纽；与前几幕同一套 .led-*）════════════ */
+var LEDGER = true;
+/* 台账／幕间压着时给 #world 挂 .modal —— 底下那两棵场景整棵钉死（附录 A.4）。
+   本幕 #ledger 在标记里就是 class="on"，起手便压着场景：少了这一处，
+   看不见的热点照样接得住点击（修前实测走通第 00 步当场 MISS）。*/
+function syncModal(){ var w = $("#world"); if(w) w.classList.toggle("modal", !!(LEDGER || bridgeOpen())); }
+function showLedger(on){
+  LEDGER = !!on;
+  $("#ledger").classList.toggle("on", LEDGER);
+  if(LEDGER){ closeBridge(); closePaperQuiet(); }
+  if(LEDGER) renderLedger();
+  syncModal();
+}
+function ledgerDone(){
+  return [ !!F.f_lid_open,
+           !!F.f_slots_full,
+           !!F.f_sealed ];
+}
+function renderLedger(){
+  var done = ledgerDone();
+  for(var i=0;i<3;i++){
+    var dot = document.getElementById("led-dot-"+(i+1));
+    var tx  = document.getElementById("led-tx-"+(i+1));
+    if(!dot) continue;
+    if(done[i]){ dot.setAttribute("fill","var(--zhu)"); dot.setAttribute("r","6"); dot.setAttribute("stroke","none"); }
+    else { dot.setAttribute("fill","none"); dot.setAttribute("r","8"); dot.setAttribute("stroke","var(--ink2)"); }
+    if(tx) tx.classList.toggle("done", !!done[i]);
+  }
+  var n = document.getElementById("hs_led_notes");
+  if(n) n.classList.toggle("gone", !F.f_act10_done);
+  var hint = $("#led-hint");
+  if(hint){
+    if(F.f_act10_done) hint.textContent = "差事已畢。箱子封上，全劇十幕畢 —— 點「取閱校勘記」。";
+    else hint.textContent = "箱裡沒有題目 —— 只有十道空槽、九枚歸卷牌、一卷無名封皮。";
+  }
+}
+
+/* ══ 13. 幕间过渡页：把上一幕交下来的东西念一遍 ═════════════════════ */
+function openBridge(){
+  var host = $("#bridge-lines");
+  host.innerHTML = "";
+  var lines = [];
+  var names = { act1:"校書閣", act2:"熔銅作", act3:"校書堂", act4:"書庫走廊",
+                act5:"膳房", act6:"類書庫", act7:"抄書齋", act8:"塔院", act9:"藏書閣" };
+  var ids = ["act1","act2","act3","act4","act5","act6","act7","act8","act9"];
+  var got = [], i;
+  for(i=0;i<ids.length;i++){
+    if(prevDone(ids[i]) || prevHas("f_" + ids[i] + "_done")) got.push(ids[i]);
+  }
+  var n = got.length;
+  lines.push("上一班在值房交下來的話：");
+  lines.push("");
+  if(n === 9){
+    lines.push("· 校書閣、熔銅作、校書堂、書庫走廊、膳房、類書庫、抄書齋、塔院、藏書閣 —— 九幕都已收束。");
+    lines.push("  九幕的校勘記都在冊上，一條也沒有丟。");
+    lines.push("  上一班留下的那句話：「無徵不信，兩存不強合。」庫房最深處那一具樟木箱，等這一班去封。");
+  }else if(n > 0){
+    var nm = [];
+    for(i=0;i<n;i++) nm.push(names[got[i]]);
+    lines.push("· 上一班只交下來一半（" + n + " 幕收了束：" + nm.join("、") + " —— 別的沒辦完）。");
+    lines.push("  沒辦完的還在原處，不催；校勘記從記得下的地方接着記。");
+  }else if(PREV){
+    lines.push("· 值房裡有存檔，但九幕的差事都沒有收束（讀不到 act1–act9 的收束記號）。");
+    lines.push("  本班照實從樟木箱底這一頁開始記，不替上一班認帳。");
+  }else{
+    lines.push("· 值房裡沒有上一班的存檔 —— 這是第一班進樟木箱底。");
+    lines.push("  校勘記從本幕這一頁開始記。");
+  }
+  lines.push("");
+  lines.push("本班的差事（三件）：");
+  lines.push("一、樟木箱合着 —— 案上取匙，挑開箱上那一道銅搭扣。");
+  lines.push("二、箱底十道空槽 —— 九牌與那一卷無名封皮，各歸其槽。");
+  lines.push("三、十槽既滿 —— 合蓋、落鎖、落印：全劇合卷。");
+  var reads = [];
+  if(prevRead("p_jia")||prevRead("p_yi")) reads.push("《茶經》殘頁二紙");
+  if(prevRead("p_ly5a")||prevRead("p_ly5b")||prevRead("p_ly1")) reads.push("《洛陽伽藍記》卷五兩本");
+  if(prevRead("p_yanshi")||prevRead("p_zheng")) reads.push("《顏氏家訓》與勘異一籤");
+  if(prevRead("p_book_a")||prevRead("p_book_b")) reads.push("《太平御覽》《北堂書鈔》");
+  if(prevRead("p_src")||prevRead("p_copy")) reads.push("《世説新語》與《茶經》所引");
+  if(prevRead("p_rule")||prevRead("p_src")) reads.push("《藏書閣體例》與散葉八條所據");
+  if(prevRead("__notes")) reads.push("《校勘記》");
+  if(reads.length){
+    lines.push("");
+    lines.push("（上一班翻過的書還攤在原處：" + reads.join("、") + "。）");
+  }
+  var y = 256;
+  for(i=0;i<lines.length;i++){
+    var t = el("text",{ "class":"br-body", x:352, y:y });
+    t.textContent = lines[i];
+    host.appendChild(t);
+    y += (lines[i] === "" ? 12 : 28);
+  }
+  $("#bridge").classList.add("on");
+  F.f_bridge_read = true; saveDebounced();
+  syncModal();
+}
+function closeBridge(){ $("#bridge").classList.remove("on"); syncModal(); }
+function bridgeOpen(){ return $("#bridge").classList.contains("on"); }
+
+/* ══ 14. 纸：在场景内展开（合卷體例 / 十幕所產一覽）════════════════
+   本幕**没有一句新的古籍引文**：素材是前九幕的產出（协议 §2 第十幕那一行）。
+   壁上两纸都是**本幕自撰**，页上照实印着「非古籍引文」。 */
+var PAPER_OPEN = null;
+function wrap(s, n){
+  /* 逐字（Array.from）折行：非 BMP 的字不会被劈成两半（照第七幕 §20.2 第（4）处）*/
+  var cs = Array.from(String(s)), out = [], i;
+  for(i=0;i<cs.length;i+=n) out.push(cs.slice(i,i+n).join(""));
+  return out;
+}
+var PAPERS = {
+  p_rule: { t:"壁上 · 合卷體例", s:"本幕自撰（非古籍引文）",
+    keys:["十道空槽","無名封皮","合卷而不判"],
+    body:[
+      "一、庫房最深處那一具樟木箱，箱底十道空槽 —— 一槽承一幕之產出。",
+      "二、十槽之次，以值房夜直之先後為序：",
+      "　　一校書閣、二熔銅作、三校書堂、四書庫走廊、五膳房、",
+      "　　六類書庫、七抄書齋、八塔院、九藏書閣、十樟木箱底。",
+      "三、每一幕之產出只在《校勘記》裡；歸槽之憑，是壁上《十幕所產一覽》那一紙。",
+      "四、第十槽不歸牌 —— 歸的是第一幕暗格裡那一卷無名封皮。這一卷是本司最舊的一件。",
+      "五、十槽既滿，合蓋、落鎖、落印。印曰「兩存」—— 合卷而不判。",
+      "六、箱子封上之後，十幕之校勘記同在箱中，一條不改、一條不刪。"
+    ],
+    note:"（哪一牌歸哪一槽，這一頁給的是憑據；牌上那兩個字，對着一覽看。）" },
+  p_list: { t:"壁上 · 十幕所產一覽", s:"前九幕所出 · 逐幕一條（本幕自撰）",
+    keys:["荼 ／ 茶","因 ／ 同","十三級 ／ 十五重","（無字）"],
+    body:[
+      "一 · 校書閣　　荼 ／ 茶　　《茶經 · 一之源》與《爾雅》郭注兩存",
+      "二 · 熔銅作　　牡 ／ 牝　　《酉陽雜爼》卷十一 · 廣知",
+      "三 · 校書堂　　遍 ／ 徧　　《顏氏家訓》勉學 與 宋祁轉引兩存",
+      "四 · 書庫走廊　三紙 ／ 三張　《顏氏家訓》勉學 · 買驢券",
+      "五 · 膳房　　　勞 ／ 蟧　　《世説》劉注引《爾雅》與《御覽》兩存",
+      "六 · 類書庫　　因 ／ 同　　《太平御覽》八六五 與《北堂書鈔》一四六",
+      "七 · 抄書齋　　申 ／ 分　　《世説》源書 與《茶經》所引抄件",
+      "八 · 塔院　　　十三級 ／ 十五重　《洛陽伽藍記》卷五 · 甲乙兩記",
+      "九 · 藏書閣　　異文錄 ／ 五門八條　一冊五門 · 八條兩存",
+      "十 · 樟木箱底　（無字）　　第一卷無名封皮 —— 歸此槽",
+      "按：十幕所產，逐幕的逐字原文與出處，皆在本冊《校勘記》各條下。",
+      "　　本幕未立新簽、未添一句引文 —— 這一箱收的是前面九幕的舊帳。"
+    ],
+    note:"（這一頁只列幕名與牌上那兩個字；逐字原文在《校勘記》裡。）" }
+};
+function showPaper(pid){
+  var P = PAPERS[pid];
+  if(!P) return;
+  PAPER_OPEN = pid;
+  if(READ.indexOf(pid) < 0){ READ.push(pid); saveDebounced(); }
+  var FKEY = { p_rule:"f_rule_read", p_list:"f_list_read" }[pid];
+  if(FKEY) F[FKEY] = true;
+  paperLayer.innerHTML = "";
+  var W = 700, H = 486, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C180,1 520,3.2 698,1.6 L698,"+(H-1.6)+" C520,"+(H-3.4)+" 180,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  g.appendChild(txt("paper-title", W/2, 50, P.t, { "text-anchor":"middle" }));
+  g.appendChild(txt("paper-sub", W/2, 76, P.s, { "text-anchor":"middle" }));
+  var lines = [];
+  for(var i=0;i<P.body.length;i++){
+    var segs = wrap(P.body[i], 40);
+    for(var j=0;j<segs.length;j++) lines.push(segs[j]);
+  }
+  var top = 116, avail = H - top - 52;
+  var lh = Math.min(26, Math.floor(avail / Math.max(1, lines.length)));
+  if(lh < 15) lh = 15;
+  var fs = lh >= 22 ? 15 : (lh >= 18 ? 14 : 12.5);
+  var y = top + 14;
+  for(i=0;i<lines.length;i++){
+    var tx = el("text",{ "class":"paper-body", x:44, y:y });
+    tx.setAttribute("font-size", fs);
+    var line = lines[i], marks = [], cur = 0;
+    P.keys.forEach(function(k){ var idx=0,p; while((p=line.indexOf(k,idx))>=0){ marks.push([p,p+k.length]); idx=p+1; } });
+    marks.sort(function(a,b){ return a[0]-b[0]; });
+    marks.forEach(function(m){
+      if(m[0] < cur) return;
+      if(m[0] > cur){ var n1 = el("tspan"); n1.textContent = line.slice(cur,m[0]); tx.appendChild(n1); }
+      var sp = el("tspan"); sp.setAttribute("class","key"); sp.textContent = line.slice(m[0],m[1]); tx.appendChild(sp);
+      cur = m[1];
+    });
+    if(cur < line.length){ var n2 = el("tspan"); n2.textContent = line.slice(cur); tx.appendChild(n2); }
+    g.appendChild(tx); y += lh;
+  }
+  if(P.note) g.appendChild(txt("paper-sub", 44, H-40, P.note, { "font-size":13, fill:"var(--faint)" }));
+  g.appendChild(txt("paper-close", W/2, H-16, "點紙外任意處 · 收起", { "text-anchor":"middle" }));
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  render(); saveDebounced();
+}
+function closePaper(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+function closePaperQuiet(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+
+/* ══ 15. 校勘记（跨幕累积：上一幕条目原样承接，本幕条目补在其后）════════
+   本幕照协议「只追加、不改写上一幕的文本」办：前九幕各一条「前 ·」原样承接，
+   本幕的条目补在其后；末页是**全劇總目**，把十幕所治逐條總覽一遍。*/
+function noteEntries(){
+  var out = [];
+  if(prevDone("act1") || prevHas("f_act1_done")){
+    out.push({ h:"前 · 校書閣一幕所校（承上一班）",
+      l:["荼／茶兩存、《釋名》三件名物歸位、卷五兩套數並記 —— 三條已在本幕之前錄畢。"] });
+  }
+  if(prevDone("act2") || prevHas("f_act2_done")){
+    out.push({ h:"前 · 熔銅作一幕所校（承上一班）",
+      l:["辱金不入爐、鍊銅自分牡牝以形爲斷、《酉陽雜爼》卷十一之門類與撰人 —— 三條已錄畢。"] });
+  }
+  if(prevDone("act3") || prevHas("f_act3_done")){
+    out.push({ h:"前 · 校書堂一幕所校（承上一班）",
+      l:["觀／讀、遍／徧兩存；宋祁自記「䂍，一作犦」；雌黃滅誤以紙色爲斷 —— 五條已錄畢。"] });
+  }
+  if(prevDone("act4") || prevHas("f_act4_done")){
+    out.push({ h:"前 · 書庫走廊一幕所校（承上一班）",
+      l:["博士買驢，書券三紙，未有驢字；「紙／張」兩存；目從券出 —— 五條已錄畢。"] });
+  }
+  if(prevDone("act5") || prevHas("f_act5_done")){
+    out.push({ h:"前 · 膳房一幕所校（承上一班）",
+      l:["《世説》劉注引《爾雅》「小者勞」與《御覽》「小者蟧」兩存；三物以大小分置三盆 —— 四條已錄畢。"] });
+  }
+  if(prevDone("act6") || prevHas("f_act6_done")){
+    out.push({ h:"前 · 類書庫一幕所校（承上一班）",
+      l:["《太平御覽》八六五引《廣志》與《北堂書鈔》一四六兩存；「因／同」一字之異；擇善而從 —— 六條已錄畢。"] });
+  }
+  if(prevDone("act7") || prevHas("f_act7_done")){
+    out.push({ h:"前 · 抄書齋一幕所校（承上一班）",
+      l:["《世説》源書與《茶經》所引抄件四處異文，各歸增／改／刪 —— 六條已錄畢。"] });
+  }
+  if(prevDone("act8") || prevHas("f_act8_done")){
+    out.push({ h:"前 · 塔院一幕所校（承上一班）",
+      l:["兩塔同基而層數各異（十三級／十五重）；槃／盤與「高三百尺」異文 —— 五條已錄畢。",
+         "上一班留下的那句話：「無徵不信，兩存不強合。」本幕把兩存的都訂成一冊。"] });
+  }
+  if(prevDone("act9") || prevHas("f_act9_done")){
+    out.push({ h:"前 · 藏書閣一幕所校（承上一班）",
+      l:["八葉散葉各依所據之書歸門，得五帖；書脊錐三孔、通一線、打一結，訂成一冊《異文錄》；",
+         "冊脊題簽、冊尾落印「兩存」—— 一冊五門 · 八條兩存。",
+         "上一班留下的那句話：「無徵不信，兩存不強合。」本幕把這一冊收進箱底。"] });
+  }
+  if(F.f_lid_open){
+    out.push({ h:"三十四 · 樟木箱底：搭扣既開，十道空槽現出",
+      l:["庫房最深處那一具樟木箱，箱蓋上着一道銅搭扣；案上取銅匙挑開，蓋掀起，箱底十道空槽現出。",
+         "按：這是操作得出來的（取匙、挑扣），不是讀出來的。箱底那十道槽，一槽承一幕之產出。"] });
+  }
+  if(F.f_slots_full){
+    out.push({ h:"三十五 · 十槽歸位：九牌與一卷無名封皮",
+      l:["一 · 校書閣（荼 ／ 茶）　二 · 熔銅作（牡 ／ 牝）　三 · 校書堂（遍 ／ 徧）",
+         "四 · 書庫走廊（三紙 ／ 三張）　五 · 膳房（勞 ／ 蟧）　六 · 類書庫（因 ／ 同）",
+         "七 · 抄書齋（申 ／ 分）　八 · 塔院（十三級 ／ 十五重）　九 · 藏書閣（異文錄 ／ 五門八條）",
+         "十 · 樟木箱底（無字）—— 第一幕暗格裡那一卷無名封皮，本幕在箱子夾層裡又拿到一次，歸此槽。",
+         "按：歸槽之憑是壁上《十幕所產一覽》那一紙與牌上那兩個字，這一箱不設題目、不設選項。",
+         "　　十槽既滿，箱底再無空處 —— 這是操作得出來的，不是讀出來的。"] });
+  }
+  if(F.f_act10_done && F.f_sealed){
+    out.push({ h:"三十六 · 合卷：合蓋、落鎖、落印（全劇收束）",
+      l:["十槽既滿，箱蓋合上；銅鎖落定，鎖上刻「合卷」；印落箱面，印文「兩存」。",
+         "按：考據之法，異文不合者兩存之；十幕所校，一條不改、一條不刪，同在箱中。",
+         "　　合卷而不判 —— 誰是誰非，留給後人再校。",
+         "　　第一幕埋下的那一卷無名封皮，這一幕歸了槽；舊版埋了五次而零回收的那件事，到此收回。",
+         "　　上一班留下的那句話，在這裡最後一次真的用上：「無徵不信，兩存不強合。」"] });
+  }
+  if(F.f_act10_done){
+    out.push({ h:"附 · 全劇總目：十幕所治一覽（總覽前面各幕）", l:totalLines() });
+  }
+  return out;
+}
+/* 總目：逐幕一行 —— 收束與否只據存檔裡的收束記號，讀不到的一律照實寫「未收束」*/
+function totalLines(){
+  var out = [], i;
+  out.push("典藏司 夜直 十班所治 —— 逐幕一條，只錄其異。");
+  out.push("");
+  for(i=0;i<TEN.length;i++){
+    var t = TEN[i];
+    var closed = (DONE.indexOf("act" + t.act) >= 0) || !!F["f_act" + t.act + "_done"];
+    out.push(t.no + " · " + t.name + "　" + t.out + "　—— " + (closed ? "已收束" : "未收束"));
+  }
+  out.push("");
+  out.push("按：收束與否，只據值房存檔裡的收束記號；沒有記號的一律照實寫「未收束」，不替誰認帳。");
+  out.push("　　十幕所治，異文不合者兩存之 —— 這一冊只錄其異、不判其是。");
+  out.push("　　無徵不信，兩存不強合。");
+  return out;
+}
+var notePage = 0;
+function showNotes(){ notePage = 0; renderNotePage(); }
+function renderNotePage(){
+  var es = noteEntries();
+  if(!es.length){ say("校勘記還是空的。", false, 2400); return; }
+  if(notePage < 0) notePage = 0;
+  if(notePage > es.length-1) notePage = es.length-1;
+  var e = es[notePage];
+  PAPER_OPEN = "__notes";
+  if(READ.indexOf("__notes") < 0){ READ.push("__notes"); }
+  paperLayer.innerHTML = "";
+  var W = 700, H = 486, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C180,1 520,3.2 698,1.6 L698,"+(H-1.6)+" C520,"+(H-3.4)+" 180,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  g.appendChild(txt("paper-title", W/2, 50, "校 勘 記", { "text-anchor":"middle" }));
+  g.appendChild(txt("paper-sub", W/2, 76,
+    "典藏司 校書閣 · 熔銅作 · 校書堂 · 書庫走廊 · 膳房 · 類書庫 · 抄書齋 · 塔院 · 藏書閣 · 樟木箱底",
+    { "text-anchor":"middle", "font-size":11 }));
+  g.appendChild(txt("tx-k", 40, 116, e.h, { "font-size":16 }));
+  /* 先量折行数，再定行距与字号（照第七幕 §20.2 第（5）处的做法：只改呈现，不动任何 flag）*/
+  var lines = [];
+  for(var i=0;i<e.l.length;i++){
+    wrap(e.l[i], 56).forEach(function(s){ lines.push(s); });
+  }
+  var top = 148, avail = H - top - 46;
+  var lh = Math.min(22, Math.floor(avail / Math.max(1, lines.length)));
+  if(lh < 15) lh = 15;
+  var fs = lh >= 20 ? 13.5 : (lh >= 17 ? 12.5 : 11.5);
+  var y = top;
+  for(i=0;i<lines.length;i++){
+    g.appendChild(txt("tx-k", 52, y, lines[i], { "font-size": fs, fill:"var(--ink2)" })); y += lh;
+  }
+  var total = es.length, dw = 14;
+  for(i=0;i<total;i++){
+    g.appendChild(el("circle",{ cx:(W/2 - (total-1)*dw/2 + i*dw), cy:H-52, r:4,
+      fill:(i===notePage) ? "var(--zhu)" : "none",
+      stroke:(i===notePage) ? "none" : "var(--faint)", "stroke-width":1 }));
+  }
+  if(notePage > 0){
+    g.appendChild(txt("paper-close", 44, H-44, "◂ 前一條", { "font-size":15 }));
+    var hp = el("rect",{ x:34, y:H-62, width:100, height:32, fill:"transparent" });
+    hp.setAttribute("style","cursor:pointer");
+    hp.addEventListener("click", function(ev){ ev.stopPropagation(); notePage--; renderNotePage(); });
+    g.appendChild(hp);
+  }
+  if(notePage < total-1){
+    g.appendChild(txt("paper-close", W-44, H-44, "後一條 ▸", { "font-size":15, "text-anchor":"end" }));
+    var hn = el("rect",{ x:W-134, y:H-62, width:100, height:32, fill:"transparent" });
+    hn.setAttribute("style","cursor:pointer");
+    hn.addEventListener("click", function(ev){ ev.stopPropagation(); notePage++; renderNotePage(); });
+    g.appendChild(hn);
+  }
+  g.appendChild(txt("paper-close", W/2, H-16, "點紙外任意處 · 收起", { "text-anchor":"middle" }));
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  /* 「读校勘记」不经过任何 flag 变化 —— 必须在那一刻直接写一次存档（协议 §1.3.2 第 5 条）*/
+  appendNotes(); saveNow();
+  try{ localStorage.setItem(NOTES_KEY, JSON.stringify({ made:Date.now(), act:ACT_NO, entries:es.length })); }catch(e2){}
+}
+
+/* ══ 16. 渲染（唯一的真相来源：flags）════════════════════════════════ */
+var NUM = ["〇","一","二","三","四","五","六","七","八","九","十"];
+function render(){
+  var i;
+  /* ① 十槽既滿 —— **由点击链自然成立**，不是脚本直接改 flag */
+  if(allSlotsFilled()) F.f_slots_full = true;
+  /* ② 樟木箱：掀蓋 / 合蓋 */
+  var ch = document.getElementById("chest");
+  if(ch){
+    ch.classList.toggle("open", !!(F.f_lid_open && !F.f_lid_shut));
+    ch.classList.toggle("shut", !!F.f_lid_shut);
+  }
+  /* ③ 十道槽：已歸的那一槽現出朱點與「已歸」*/
+  for(i=1;i<=10;i++){
+    var sg = document.getElementById("slot-" + i);
+    if(sg) sg.classList.toggle("filled", !!F["f_slot"+i+"_filled"]);
+  }
+  /* ④ 箱蓋落下（合卷）/ 鎖 / 印 */
+  var ld = document.getElementById("lid-down");   if(ld) ld.classList.toggle("on", !!F.f_lid_shut);
+  var lk = document.getElementById("lid-lock");   if(lk) lk.classList.toggle("on", !!F.f_locked);
+  var ls = document.getElementById("lid-seal");   if(ls) ls.classList.toggle("on", !!F.f_sealed);
+  /* ⑤ 簏中的牌數 */
+  var bn = document.getElementById("basket-n");
+  if(bn){
+    var left = basketLeft();
+    bn.textContent = left > 0 ? ("簏中尚有" + NUM[left] + "牌") : "簏中牌盡";
+  }
+  /* ⑥ 取走的那幾件：原位淡下去 */
+  var STANDS = { it_key:"key-stand", it_cover:"cover-stand", it_lock:"lock-stand", it_seal:"seal-stand" };
+  for(var k2 in STANDS){
+    var n2 = document.getElementById(STANDS[k2]);
+    if(n2) n2.classList.toggle("taken", INV.indexOf(k2) >= 0);
+  }
+  /* ⑦ 收束：印落箱面之後，本幕的差事才算畢 */
+  if(F.f_sealed) F.f_act10_done = true;
+  /* ⑧ 錯法到三次：箱底留一块 12% 朱砂 */
+  var pr = (F.f_misplaced_count|0) >= 3;
+  var p1 = document.getElementById("prints");  if(p1) p1.classList.toggle("show", pr);
+  var p2 = document.getElementById("prints2"); if(p2) p2.classList.toggle("show", pr);
+  var nb = document.getElementById("hs_led_notes");
+  if(nb) nb.classList.toggle("gone", !F.f_act10_done);
+  renderLedger();
+  renderInv(); applyArmed();
+}
+
+/* ══ 17. 失败回路：可复原、不锁死（与第一–九幕同一语法）═══════════════
+   规则：任何一个放错的动作 = 现场变化（抖一下 / 牌順箱底滑回）+ 一句方位话。
+   计数器只管「累了几次」。**绝不出判语。** */
+function shake(hsId){
+  var g = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(g){ g.classList.remove("shaking"); void g.offsetWidth; g.classList.add("shaking");
+    setTimeout(function(){ g.classList.remove("shaking"); }, 300); }
+}
+function bump(hsId){
+  shake(hsId);
+  F.f_misplaced_count = (F.f_misplaced_count|0) + 1;
+  render(); saveDebounced();
+}
+function ghostFall(id, ms){
+  var gh = document.getElementById(id); if(!gh) return;
+  gh.classList.remove("fall"); void gh.offsetWidth; gh.classList.add("fall");
+  setTimeout(function(){ gh.classList.remove("fall"); }, ms+80);
+}
+
+/* ══ 18. 热点行为 ═══════════════════════════════════════════════════ */
+var tapCount = {}, flagsAtTap = {};
+function onHotspot(id){
+  if(PAPER_OPEN){ closePaper(); return; }
+  var before = JSON.stringify(F) + SEL + INV.length;
+  tapCount[id] = (tapCount[id]||0)+1;
+  if(tapCount[id] >= 5 && flagsAtTap[id] === before){ hint(); tapCount[id] = 0; }
+  if(tapCount[id] === 1) flagsAtTap[id] = before;
+  var fn = H[id];
+  if(fn) fn();
+}
+function hold(id){
+  if(INV.indexOf(id) < 0) INV.push(id);
+  SEL = id;
+  renderInv(); applyArmed(); render(); saveDebounced();
+}
+/* —— ① 取匙、開搭扣 —— */
+function takeKey(){
+  if(INV.indexOf("it_key") >= 0){
+    SEL = "it_key"; renderInv(); applyArmed(); render();
+    say("銅匙在手 —— 箱蓋上那一道銅搭扣，挑得開。", false, 3200); return;
+  }
+  hold("it_key"); F.f_key_taken = true; sfx("tag");
+  say("取了案上那支銅匙 —— 箱蓋上那一道銅搭扣，挑得開。", false, 3800);
+  render(); saveNow();
+}
+function useLatch(){
+  if(F.f_lid_open){ shake("h_latch"); say("搭扣已經挑開了 —— 箱蓋掀着，箱底十道槽就開在裡頭。", false, 3400); return; }
+  if(SEL !== "it_key"){
+    /* 錯法一：匙不在手就開搭扣 —— 現場變化（抖）+ 一句方位话，可立即重放 */
+    bump("h_latch");
+    say("搭扣上着一道銅鎖 —— 案上那支銅匙先在手上。", false, 4200);
+    return;
+  }
+  F.f_lid_open = true; take("it_key"); sfx("wood");
+  say("搭扣挑開了，箱蓋掀起 —— 箱底十道空槽，一槽承一幕。銅匙擱回案上。", false, 4600);
+  render(); saveNow();
+}
+/* —— ② 從簏裡取牌、逐牌歸槽 —— */
+function takeTag(){
+  var held = tagNoOf(SEL) || (SEL === "it_cover" ? -1 : 0);
+  if(held > 0){
+    var t = tenOf(held);
+    /* 錯法二：手裡還捏着一牌，又去取另一牌 —— 現場變化（抖）+ 一句方位话，可立即重放 */
+    bump("h_basket");
+    say("手裡還捏着「" + t.key + "」那一牌 —— 先把它歸到它那一槽，再取這一牌。", false, 4600);
+    return;
+  }
+  var n = nextTagNo();
+  if(!n){ shake("h_basket"); say("簏中牌盡 —— 九牌都歸了槽。第十槽留着箱子夾層裡那一卷無名封皮。", false, 4400); return; }
+  hold("it_tag" + n); sfx("leaf");
+  say("從簏裡取了一牌 —— 牌上是「" + tenOf(n).key + "」。看它據的是哪一幕。", false, 4400);
+  render(); saveNow();
+}
+function takeCover(){
+  if(INV.indexOf("it_cover") >= 0){
+    SEL = "it_cover"; renderInv(); applyArmed(); render();
+    say("那一卷無名封皮在手 —— 第一幕暗格裡那一卷；歸第十槽。", false, 3400); return;
+  }
+  hold("it_cover"); sfx("leaf");
+  say("取了箱子夾層裡那一卷無名封皮 —— 無字、無簽，只有一道舊封。歸第十槽。", false, 4400);
+  render(); saveNow();
+}
+function fileSlot(n){
+  if(F["f_slot"+n+"_filled"]){
+    shake("h_slot"+n);
+    say("這一槽已經歸位了 —— 別的槽還空着。", false, 3000); return;
+  }
+  if(SEL === "it_cover"){
+    if(n !== 10){
+      /* 錯法三：這一物不是這一槽的 —— 順箱底滑回（現場變化），仍在手上，可立即重放 */
+      var g1 = document.getElementById("tag-ghost");
+      if(g1){ g1.setAttribute("class", "at-s" + n); ghostFall("tag-ghost", 460); }
+      bump("h_slot" + n);
+      say("這一物不是「" + tenOf(n).name + "」那一槽的 —— 順着箱底滑了回來。第十槽留着這一卷。", false, 4800);
+      return;
+    }
+    F.f_slot10_filled = true; take("it_cover"); sfx("board");
+    if(allSlotsFilled()) say("十槽都歸了位 —— 箱底再無空處。合蓋、落鎖、落印。", false, 4600);
+    else say("那一卷無名封皮歸了第十槽 —— 別的槽還有空的。", false, 3400);
+    render(); saveNow(); return;
+  }
+  var tagNo = tagNoOf(SEL);
+  if(!tagNo){ shake("h_slot" + n); say("這一槽還空着 —— 手上先從簏裡取一牌。", false, 3200); return; }
+  if(tagNo !== n){
+    var g2 = document.getElementById("tag-ghost");
+    if(g2){ g2.setAttribute("class", "at-s" + n); ghostFall("tag-ghost", 460); }
+    bump("h_slot" + n);
+    say("這一牌不是「" + tenOf(n).name + "」那一槽的 —— 牌順着箱底滑了回來。看牌上那兩個字據的是哪一幕。", false, 4800);
+    return;
+  }
+  F["f_slot" + n + "_filled"] = true; take("it_tag" + n); sfx("board");
+  if(allSlotsFilled()) say("十槽都歸了位 —— 箱底再無空處。合蓋、落鎖、落印。", false, 4600);
+  else say("這一牌歸了「" + tenOf(n).name + "」那一槽 —— 箱底還有空的。", false, 3400);
+  render(); saveNow();
+}
+/* —— ③ 合蓋、落鎖、落印（同一熱點三用）—— */
+function takeLock(){
+  if(INV.indexOf("it_lock") >= 0){
+    SEL = "it_lock"; renderInv(); applyArmed(); render();
+    say("銅鎖在手 —— 箱蓋合上之後，鎖落在搭扣上。", false, 3400); return;
+  }
+  hold("it_lock"); F.f_lock_taken = true; sfx("tag");
+  say("取了那一具銅鎖 —— 箱蓋合上之後，鎖落在搭扣上。", false, 3800);
+  render(); saveNow();
+}
+function takeSeal(){
+  if(INV.indexOf("it_seal") >= 0){
+    SEL = "it_seal"; renderInv(); applyArmed(); render();
+    say("印在手 —— 落鎖之後，落在箱面上。", false, 3400); return;
+  }
+  hold("it_seal"); F.f_seal_taken = true; sfx("tag");
+  say("取了那一方印 —— 落鎖之後，落在箱面上。", false, 3800);
+  render(); saveNow();
+}
+function useShut(){
+  if(SEL === "it_lock"){
+    if(!F.f_lid_shut){
+      bump("h_shut");
+      say("箱蓋還掀着 —— 鎖落不下去。先把蓋合上。", false, 4000);
+      return;
+    }
+    if(F.f_locked){ shake("h_shut"); say("搭扣上已經落過鎖了。", false, 2600); return; }
+    F.f_locked = true; take("it_lock"); sfx("wood");
+    say("鎖落在搭扣上，鎖面刻一個「合卷」—— 箱子合上了。還差一方印。", false, 4400);
+    render(); saveNow(); return;
+  }
+  if(SEL === "it_seal"){
+    if(!F.f_locked){
+      bump("h_shut");
+      say("鎖還沒有落 —— 印落在鎖之後。箱蓋先合、搭扣再落鎖。", false, 4200);
+      return;
+    }
+    if(F.f_sealed){ shake("h_shut"); say("箱面上已經落過印了。", false, 2600); return; }
+    F.f_sealed = true; take("it_seal"); sfx("board");
+    say("印落在箱面上，印文「兩存」—— 合卷而不判。十幕之校勘記，同在箱中。", false, 4800);
+    render(); saveNow(); return;
+  }
+  if(tagNoOf(SEL) || SEL === "it_cover"){
+    shake("h_shut");
+    say("手裡還捏着一牌 —— 先把它歸到它那一槽，再論合蓋。", false, 3600);
+    return;
+  }
+  if(!F.f_slots_full){
+    /* 錯法四：十槽未滿就合蓋 —— 現場變化（抖）+ 一句方位话，可立即重放 */
+    bump("h_shut");
+    say("十道槽還沒有都歸位 —— 蓋合不上。空着的槽把蓋頂着。", false, 4400);
+    return;
+  }
+  if(F.f_lid_shut){ shake("h_shut"); say("箱蓋已經合上了 —— 搭扣上還缺一具銅鎖。", false, 3200); return; }
+  F.f_lid_shut = true; sfx("wood");
+  say("箱蓋合上了 —— 搭扣對上，還缺一具銅鎖。", false, 4000);
+  render(); saveNow();
+}
+var H = {
+  /* —— 台账 / 幕间 —— */
+  h_ledger_enter: function(){ showLedger(false); F.f_seen_act10 = true; setCam("room"); render(); sfx("paper"); },
+  h_ledger_bridge: function(){ openBridge(); },
+  h_bridge_go: function(){ closeBridge(); showLedger(false); setCam("room"); render(); },
+  h_bridge_back: function(){ closeBridge(); showLedger(true); },
+  h_ledger_notes: function(){ showNotes(); },
+
+  /* —— 庫房全景 —— */
+  h_rule: function(){ showPaper("p_rule"); },
+  h_list: function(){ showPaper("p_list"); },
+  h_key:  function(){ takeKey(); },
+  h_latch:function(){ useLatch(); },
+  h_go: function(){
+    if(!F.f_lid_open){
+      shake("h_go");
+      say("箱蓋還合着 —— 搭扣沒開，看不見箱底。案上那支銅匙先來。", false, 4200);
+      return;
+    }
+    goClose(); sfx("wood"); F.f_close_entered = true;
+    say("走近樟木箱 —— 箱底十道空槽，案右首一只簏盛着歸卷牌。", false, 4200);
+    render(); saveNow();
+  },
+
+  /* —— 箱底近景 —— */
+  h_basket: function(){ takeTag(); },
+  h_cover:  function(){ takeCover(); },
+  h_lock:   function(){ takeLock(); },
+  h_seal:   function(){ takeSeal(); },
+  h_shut:   function(){ useShut(); },
+  h_slot1:  function(){ fileSlot(1); },
+  h_slot2:  function(){ fileSlot(2); },
+  h_slot3:  function(){ fileSlot(3); },
+  h_slot4:  function(){ fileSlot(4); },
+  h_slot5:  function(){ fileSlot(5); },
+  h_slot6:  function(){ fileSlot(6); },
+  h_slot7:  function(){ fileSlot(7); },
+  h_slot8:  function(){ fileSlot(8); },
+  h_slot9:  function(){ fileSlot(9); },
+  h_slot10: function(){ fileSlot(10); },
+  h_close_back: function(){ goRoom(); say("退回庫中。", false, 1600); render(); }
+};
+
+/* ══ 19. 老掌书：只指方位，不给内容；没有提示按钮 ═══════════════════ */
+var HINTS = {
+  latch:"箱蓋上那一道銅搭扣 —— 案上那支銅匙要它。",
+  key:"案上那支銅匙 —— 挑開搭扣，箱蓋才掀得起。",
+  go:"箱蓋掀開之後，走近箱前那一片 —— 箱底十道空槽就在裡頭。",
+  basket:"箱底近景，案右首那只簏 —— 九枚歸卷牌都盛在裡頭。",
+  slots:"箱底那十道槽 —— 一槽一幕，槽上刻着幕名。",
+  wall:"壁上《十幕所產一覽》那一紙 —— 一槽一幕，逐幕對照。",
+  cover:"箱子夾層裡那一卷無名封皮 —— 第十槽留着它。",
+  lockseal:"案右首那具銅鎖與那一方印 —— 合蓋之後才輪到它們。"
+};
+var hintUsed = {}, lastHint = 0;
+function hint(){
+  var now = Date.now();
+  if(now - lastHint < 180000) return;
+  var order;
+  if(!F.f_lid_open) order = ["latch","key","wall"];
+  else if(CAM !== "close") order = ["go","wall","basket"];
+  else if(!F.f_slots_full) order = ["basket","slots","wall","cover"];
+  else if(!F.f_sealed) order = ["lockseal","slots"];
+  else order = ["slots","wall"];
+  for(var i=0;i<order.length;i++){
+    var k = order[i];
+    if(hintUsed[k]) continue;
+    hintUsed[k] = 1; lastHint = now;
+    say(HINTS[k], false, 4200);
+    return;
+  }
+}
+var idleT = null;
+function pokeIdle(){ clearTimeout(idleT); idleT = setTimeout(hint, 90000); }
+document.addEventListener("mousemove", pokeIdle, {passive:true});
+document.addEventListener("keydown", pokeIdle);
+
+/* ══ 20. 事件绑定 ═══════════════════════════════════════════════════ */
+function inActiveView(node){
+  var v = node.closest ? node.closest(".view") : null;
+  return !v || v.classList.contains("active");
+}
+stage.addEventListener("click", function(e){
+  var hs = e.target.closest ? e.target.closest(".hs") : null;
+  if(hs && hs.dataset.hs && !hs.classList.contains("gone")){
+    if(inActiveView(hs)) onHotspot(hs.dataset.hs);
+    return;
+  }
+  /* 判序：热点 → 纸 → 过渡页 → 台账（附录 A.5 坑 24：纸画在最后、压在两者之上，
+     排在台账之前才点得掉 —— 旧判序先 `if(LEDGER) return;`，台账开着时校勘记那一页收不起来）*/
+  if(PAPER_OPEN){ closePaper(); return; }
+  if(bridgeOpen()){ return; }
+  if(LEDGER) return;
+  if(CAM !== "room") goRoom();
+});
+$("#bk").addEventListener("click", function(e){ e.stopPropagation(); showLedger(true); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){
+    if(bridgeOpen()){ closeBridge(); return; }
+    if(LEDGER){ showLedger(false); return; }
+    if(PAPER_OPEN) closePaper(); else if(CAM !== "room") goRoom();
+  }
+  var k = (e.key||"").toLowerCase();
+  if(k === "b") showLedger(!LEDGER);
+  if(k === "1") setCam("room");
+  if(k === "2") setCam("close");
+});
+
+/* ══ 21. 启动 ═══════════════════════════════════════════════════════ */
+function boot(){
+  buildSymbols();
+  var restored = false;
+  var AUTO = (location.hash.match(/auto=([a-z0-9]+)/i)||[])[1];
+  var FRESH = /fresh/.test(location.hash);
+  if(AUTO || FRESH){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} resetState(); }
+  else restored = load();
+  if(!restored) resetState();
+  F.f_seen_act10 = true;
+  render();
+  setCam(CAM || "room");
+  /* #ledger 在标记里就是 class="on"，起手便压着场景 —— boot() 不补这一次，
+     底下那两棵场景就是「看不见却接得住点击」（修前实测走通第 00 步直接 MISS）*/
+  syncModal();
+  if(AUTO){ showLedger(true); }
+  /* 截图探针（仅 ?probe= 时生效）：只摆 flags 与相机，不跳过任何交互分支 */
+  var PROBE = (location.search.match(/[?&]probe=([a-z0-9]+)/i)||[])[1];
+  if(/[?&]still=1/.test(location.search)){
+    var st = document.createElement("style");
+    st.textContent = "*{transition-duration:0s!important;animation-delay:0s!important}";
+    document.head.appendChild(st);
+  }
+  function showRoom(){ showLedger(false); F.f_seen_act10 = true; setCam("room"); render(); }
+  function showClose(){ showLedger(false); setCam("close"); render(); }
+  function fillAll(){ for(var i=1;i<=10;i++){ F["f_slot"+i+"_filled"] = true; } }
+  if(PROBE){
+    if(PROBE === "room"){ showRoom(); }
+    else if(PROBE === "close"){ F.f_lid_open = true; F.f_key_taken = true; showClose(); }
+    else if(PROBE === "rule"){ showRoom(); showPaper("p_rule"); }
+    else if(PROBE === "list"){ showRoom(); showPaper("p_list"); }
+    else if(PROBE === "opened"){ F.f_lid_open = true; F.f_key_taken = true; showRoom(); }
+    else if(PROBE === "filled"){ F.f_lid_open = true; F.f_key_taken = true; fillAll(); showClose(); }
+    else if(PROBE === "shut"){ F.f_lid_open = true; F.f_key_taken = true; fillAll(); F.f_lid_shut = true; showClose(); }
+    else if(PROBE === "locked"){
+      F.f_lid_open = true; F.f_key_taken = true; fillAll();
+      F.f_lid_shut = true; F.f_lock_taken = true; F.f_locked = true;
+      showClose();
+    }
+    else if(PROBE === "sealed" || PROBE === "done"){
+      F.f_lid_open = true; F.f_key_taken = true; fillAll();
+      F.f_lid_shut = true; F.f_lock_taken = true; F.f_locked = true;
+      F.f_seal_taken = true; F.f_sealed = true;
+      showClose();
+    }
+    else if(PROBE === "notes"){
+      F.f_lid_open = true; F.f_key_taken = true; fillAll();
+      F.f_lid_shut = true; F.f_lock_taken = true; F.f_locked = true;
+      F.f_seal_taken = true; F.f_sealed = true;
+      showRoom(); showNotes();
+    }
+    else if(PROBE === "total"){
+      /* 末页：全劇總目（總覽前面各幕）—— 只摆 flags 与页码，不跳过任何交互分支 */
+      F.f_lid_open = true; F.f_key_taken = true; fillAll();
+      F.f_lid_shut = true; F.f_lock_taken = true; F.f_locked = true;
+      F.f_seal_taken = true; F.f_sealed = true;
+      showRoom(); showNotes();
+      notePage = noteEntries().length - 1; renderNotePage();
+    }
+    else if(PROBE === "bridge"){ showRoom(); openBridge(); }
+    else if(PROBE === "bridgefull"){ load(); render(); setCam("room"); showLedger(false); openBridge(); }
+    else if(PROBE === "ledger"){ showLedger(true); }
+  }
+  requestAnimationFrame(function(){ $("#boot").classList.add("gone"); });
+  pokeIdle();
+  if(AUTO) runAuto(AUTO);
+  else if(restored) say("接着上次的地方。", false, 2400);
+}
+
+/* ══ 22. 自动走通：清档重来 + 只用真实 MouseEvent('click') 打真实 .hit ══
+   脚本**不直接改任何 flag**：箱蓋靠「取匙 → 挑扣」自然掀开，十槽靠「簏取牌 → 點槽」
+   自然成立，合卷靠「合蓋 → 落鎖 → 落印」自然成立 —— runAuto 里没有一处 F.xxx = true。 */
+function click(hsId){
+  var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(!n) return false;
+  if(n.classList.contains("gone")) return false;
+  var hit = n.querySelector(".hit") || n;
+  if(!inActiveView(n)) return false;
+  hit.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function clickEl(sel){
+  var n = document.querySelector(sel);
+  if(!n) return false;
+  n.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function w(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function slotOf(itemId){
+  var i = INV.indexOf(itemId); if(i < 0) return null;
+  return document.querySelector('.slot[data-slot="'+i+'"]');
+}
+function pickSlot(itemId){
+  if(SEL === itemId) return true;
+  var s = slotOf(itemId); if(!s) return false;
+  s.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return SEL === itemId;
+}
+async function runAuto(stop){
+  var log = [];
+  function step(name, ok){ log.push(name + "=" + (ok ? "ok" : "MISS")); }
+  function report(){
+    document.title = "SELFTEST::" + log.join(" | ")
+      + " || FLAGS[" + FLAG_KEYS.filter(function(k){ return F[k]; }).join(",") + "]"
+      + " || misplaced=" + F.f_misplaced_count
+      + " || INV[" + INV.join(",") + "] || CAM=" + CAM
+      + " || SLOT[" + slotsFilled() + "/10] BASKET=" + basketLeft()
+      + " || READ[" + READ.join(",") + "]"
+      + " || DONE[" + DONE.join(",") + "]";
+    document.body.setAttribute("data-selftest", log.join(" | "));
+  }
+  var i, n;
+  try{
+    if(stop === "ledger"){ step("停在值房台賬", LEDGER); report(); return; }
+    step("0_讀幕間", click("h_ledger_bridge")); await w(187);
+    step("1_收起幕間", click("h_bridge_go")); await w(187);
+    if(stop === "bridge"){ step("停在幕間", true); report(); return; }
+    step("2_推門入庫", click("h_ledger_enter")); await w(209);
+    /* ── 翻書可查：合卷體例 + 十幕所產一覽 ─────────────────────── */
+    step("3_讀合卷體例", click("h_rule")); await w(165); closePaper(); await w(120);
+    step("4_讀十幕一覽", click("h_list")); await w(165); closePaper(); await w(120);
+    /* ── 錯法一：匙不在手就開搭扣（現場變化：抖 + 計數，可立即重放）── */
+    step("5_錯法一_匙不在手就開搭扣", (function(){ click("h_latch"); return (F.f_misplaced_count|0) >= 1; })()); await w(220);
+    step("6_錯法一已記_蓋未掀", !F.f_lid_open);
+    /* ── 蓋未掀就走近：只抖一下、只給一句方位话，不計數 ─────────── */
+    step("7_蓋未掀就想走近", (function(){ var b = (F.f_misplaced_count|0); click("h_go"); return (F.f_misplaced_count|0) === b && CAM === "room"; })()); await w(187);
+    /* ── 取匙、挑扣、掀蓋 ─────────────────────────────────────── */
+    step("8_取銅匙", (function(){ click("h_key"); return SEL === "it_key"; })()); await w(187);
+    step("9_挑開搭扣_蓋掀起", (function(){ click("h_latch"); return !!F.f_lid_open; })()); await w(231);
+    step("10_匙已歸案上", INV.indexOf("it_key") < 0);
+    step("11_走近樟木箱", (function(){ click("h_go"); return CAM === "close"; })()); await w(341);
+    step("12_在箱底近景", CAM === "close");
+    /* ── 簏中出第一牌（五 · 膳房）──────────────────────────────── */
+    step("13_取第一牌", (function(){ click("h_basket"); return SEL === "it_tag5"; })()); await w(187);
+    /* ── 錯法二：手裡還捏着一牌，又去取另一牌 ─────────────────── */
+    step("14_錯法二_手上有牌再取牌", (function(){ click("h_basket"); return (F.f_misplaced_count|0) >= 2; })()); await w(220);
+    step("15_錯法二已記_手上仍是那一牌", SEL === "it_tag5");
+    step("16_膳房牌歸第五槽", (function(){ click("h_slot5"); return !!F.f_slot5_filled; })()); await w(220);
+    /* ── 錯法三：牌歸錯槽（牌順箱底滑回）──────────────────────── */
+    step("17_取第二牌", (function(){ click("h_basket"); return SEL === "it_tag2"; })()); await w(176);
+    step("18_錯法三_牌歸錯槽", (function(){ click("h_slot7"); return (F.f_misplaced_count|0) >= 3 && !F.f_slot7_filled; })()); await w(242);
+    step("19_錯法三已記_牌仍在手", SEL === "it_tag2");
+    step("20_熔銅作牌歸第二槽", (function(){ click("h_slot2"); return !!F.f_slot2_filled; })()); await w(198);
+    /* ── 錯法四：十槽未滿就合蓋 ───────────────────────────────── */
+    step("21_錯法四_十槽未滿就合蓋", (function(){ click("h_shut"); return (F.f_misplaced_count|0) >= 4; })()); await w(220);
+    step("22_錯法四已記_蓋未合上", !F.f_lid_shut);
+    step("23_空手點第十槽", (function(){ var b = (F.f_misplaced_count|0); click("h_slot10"); return (F.f_misplaced_count|0) === b; })()); await w(187);
+    /* ── 其餘七牌逐牌歸槽（簏中固定次序：9,1,7,3,8,4,6）───────── */
+    step("24_取第三牌", (function(){ click("h_basket"); return SEL === "it_tag9"; })()); await w(176);
+    step("25_藏書閣牌歸第九槽", (function(){ click("h_slot9"); return !!F.f_slot9_filled; })()); await w(198);
+    step("26_取第四牌", (function(){ click("h_basket"); return SEL === "it_tag1"; })()); await w(176);
+    step("27_校書閣牌歸第一槽", (function(){ click("h_slot1"); return !!F.f_slot1_filled; })()); await w(198);
+    step("28_取第五牌", (function(){ click("h_basket"); return SEL === "it_tag7"; })()); await w(176);
+    step("29_抄書齋牌歸第七槽", (function(){ click("h_slot7"); return !!F.f_slot7_filled; })()); await w(198);
+    step("30_取第六牌", (function(){ click("h_basket"); return SEL === "it_tag3"; })()); await w(176);
+    step("31_校書堂牌歸第三槽", (function(){ click("h_slot3"); return !!F.f_slot3_filled; })()); await w(198);
+    step("32_取第七牌", (function(){ click("h_basket"); return SEL === "it_tag8"; })()); await w(176);
+    step("33_塔院牌歸第八槽", (function(){ click("h_slot8"); return !!F.f_slot8_filled; })()); await w(198);
+    step("34_取第八牌", (function(){ click("h_basket"); return SEL === "it_tag4"; })()); await w(176);
+    step("35_書庫走廊牌歸第四槽", (function(){ click("h_slot4"); return !!F.f_slot4_filled; })()); await w(198);
+    step("36_取第九牌", (function(){ click("h_basket"); return SEL === "it_tag6"; })()); await w(176);
+    step("37_類書庫牌歸第六槽", (function(){ click("h_slot6"); return !!F.f_slot6_filled; })()); await w(198);
+    step("38_簏中牌盡", basketLeft() === 0);
+    /* ── 第十槽：箱子夾層裡那一卷無名封皮 ─────────────────────── */
+    step("39_取無名封皮", (function(){ click("h_cover"); return SEL === "it_cover"; })()); await w(187);
+    step("40_封皮歸第十槽", (function(){ click("h_slot10"); return !!F.f_slot10_filled; })()); await w(242);
+    step("41_十槽既滿", !!(F.f_slots_full && allSlotsFilled()));
+    /* ── 合卷：合蓋 → 落鎖 → 落印 ──────────────────────────────── */
+    step("42_合蓋", (function(){ click("h_shut"); return !!F.f_lid_shut; })()); await w(242);
+    step("43_取銅鎖", (function(){ click("h_lock"); return SEL === "it_lock"; })()); await w(187);
+    step("44_落鎖_合卷", (function(){ click("h_shut"); return !!F.f_locked; })()); await w(242);
+    step("45_取印", (function(){ click("h_seal"); return SEL === "it_seal"; })()); await w(187);
+    step("46_落印_兩存", (function(){ click("h_shut"); return !!F.f_sealed; })()); await w(242);
+    step("47_收束成立", !!F.f_act10_done);
+    /* ── 收束：回庫中 → 開台账 → 校勘记（總覽各幕）───────────── */
+    step("48_回庫中", (function(){ click("h_close_back"); return CAM === "room"; })()); await w(231);
+    step("49_開台賬", (function(){ clickEl("#bk"); return LEDGER; })()); await w(209);
+    step("50_校勘記", (function(){ click("h_ledger_notes"); return PAPER_OPEN === "__notes"; })()); await w(286);
+    if(stop === "notes"){ report(); return; }
+    /* 翻到最後一頁（全劇總目）—— 只用「後一條」那個命中面（x 固定為 W-134 = 566）*/
+    for(i=0;i<24;i++){
+      var nxt = null;
+      paperLayer.querySelectorAll("rect").forEach(function(r){
+        if(r.getAttribute("x") === "566") nxt = r;
+      });
+      if(!nxt) break;
+      nxt.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+      await w(60);
+    }
+    step("51_校勘記末尾_全劇總目", (function(){
+      var ts = paperLayer.querySelectorAll("text");
+      var all = "";
+      for(var q=0;q<ts.length;q++) all += ts[q].textContent;
+      return all.indexOf("全劇總目") >= 0 && all.indexOf("已收束") >= 0;
+    })());
+    closePaper(); await w(132);
+    step("52_再入庫", click("h_ledger_enter")); await w(209);
+    step("53_收束_本幕已畢", !!F.f_act10_done);
+  }catch(err){ log.push("ERR=" + (err && err.message)); }
+  report();
+}
+
+window.__dd = { F:function(){ return F; }, INV:function(){ return INV; }, DONE:function(){ return DONE; },
+  CAM:function(){ return CAM; }, click:click, setCam:setCam,
+  auto:runAuto, inActiveView:inActiveView, slotsFilled:slotsFilled, basketLeft:basketLeft,
+  hexOf:function(i){ return TEN[i].key; },
+  state:function(){ return {F:F, INV:INV, CAM:CAM, SEL:SEL, DONE:DONE, READ:READ}; } };
+/* 探针（_selftest/probe-accept-act10.html）需要按名调用这两个只切覆盖层/重绘的函数 */
+window.showLedger = showLedger;
+window.render = render;
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();
+})();
+</script>
+</body>
+</html>

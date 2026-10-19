@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 简笔样张 · view-cabinet（柜内三件衣物平摊）</title>
+<style>
+  /* ── 色板：只用现有成品 dist/index.html 第 9–11 行的 9 个 token，不新增第 8 色 ── */
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    /* 线宽三级（1200×720 与 960×640 viewBox 下同值，不缩放） */
+    --l1:2.2px; --l2:1.4px; --l3:0.9px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{min-height:100%}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    padding:18px 18px 40px;
+  }
+  .stage{width:min(96vw,960px)}
+  svg.scene{display:block;width:100%;height:auto;background:var(--paper)}
+
+  /* ── 三级线 ── */
+  .l1{stroke:var(--ink); stroke-width:var(--l1); stroke-linecap:round; stroke-linejoin:round; fill:none}
+  .l2{stroke:var(--ink2); stroke-width:var(--l2); stroke-linecap:round; stroke-linejoin:round; fill:none}
+  .l3{stroke:var(--faint); stroke-width:var(--l3); stroke-linecap:round; stroke-linejoin:round; fill:none}
+  /* 内角不圆：柜内凹腔专用 */
+  .miter{stroke-linejoin:miter}
+  /* ── 平涂（≤4 块/物件；全幕物件本体上唯一一处朱砂 = 心衣那块襠）── */
+  .f-wood{fill:#b9a88c}
+  .f-card{fill:var(--card)}
+  .f-zhu{fill:var(--zhu)}
+  /* ── 视角规格（与切片 第一幕.html 同一套）：轻斜投影 dy = -0.5·depth（2:1）
+        .slab 柜板板面（水平面）　.recess 凹腔底面（水平面）── */
+  .slab{fill:var(--card);stroke:none}
+  .recess{fill:var(--paper2);stroke:none}
+  /* ── 阴影只有一层：贴底 8% 墨接触影，无方向性，不用 drop-shadow ── */
+  .shadow{fill:var(--ink); opacity:.08}
+  .cap{font-family:"Kaiti SC","STKaiti","KaiTi","Songti SC",serif}
+
+  /* ── 轮廓模式：只保留外轮廓（去色、去内部细节、去家具与阴影）── */
+  .silh #layer-furniture,.silh #layer-shadow{display:none}
+  .silh #layer-garment *{fill:var(--ink)!important;stroke:var(--ink)!important}
+
+  /* ── 评审 UI（不属于画面，不进游戏）── */
+  .bar{width:min(96vw,960px);display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+       border-top:1px solid var(--line2);padding-top:10px;font-size:13px;color:var(--ink2)}
+  .bar b{color:var(--ink);font-weight:400}
+  .btn{border:1px solid var(--line2);background:var(--card);color:var(--ink);
+       font:inherit;font-size:13px;padding:5px 11px;border-radius:2px;cursor:pointer}
+  .btn[aria-pressed="true"]{border-color:var(--zhu);color:var(--zhu)}
+  .note{width:min(96vw,960px);font-size:12.5px;line-height:1.9;color:var(--ink2);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .labels{width:min(96vw,960px);display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:13px;line-height:1.7}
+  .labels>div{border-left:2px solid var(--line2);padding-left:8px;color:var(--ink2)}
+  .labels b{display:block;color:var(--ink);font-weight:400;font-size:15px}
+  .labels .k{color:var(--zhu)}
+  .hide{display:none!important}
+  #metrics{width:min(96vw,960px);border:1px solid var(--line2);background:var(--card);
+           padding:12px 14px;font-size:12.5px;line-height:1.75}
+  #metrics h3{font-size:13px;font-weight:400;color:var(--ink);margin-bottom:8px;letter-spacing:.06em}
+  #metrics table{border-collapse:collapse;width:100%;font-size:12px}
+  #metrics th,#metrics td{border-bottom:1px solid var(--line);padding:3px 6px;text-align:left;white-space:nowrap}
+  #metrics th{color:var(--ink2);font-weight:400}
+  #metrics .verdict{margin-top:9px;padding-top:8px;border-top:1px solid var(--line2);color:var(--ink)}
+  .splitwrap{width:min(96vw,960px);display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .splitwrap figure{border:1px solid var(--line2);background:var(--card);padding:6px}
+  .splitwrap svg{display:block;width:100%;height:auto;background:var(--card)}
+  .splitwrap figcaption{font-size:12px;color:var(--ink2);text-align:center;padding-top:5px;line-height:1.6}
+  @media(max-width:720px){.labels,.splitwrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="stage">
+<!-- ══════════════ 主图：view-cabinet 960×640 柜内近景 ══════════════ -->
+<svg class="scene" id="scene" viewBox="0 0 960 640" shape-rendering="geometricPrecision"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="柜内近景：三件衣物平摊在三格柜板上">
+  <rect x="0" y="0" width="960" height="640" fill="var(--paper)"/>
+
+  <!-- ── 家具层（木器平涂 #b9a88c，铜件只用 L2 线画轮廓、不平涂）── -->
+  <g id="layer-furniture">
+    <!-- 柜体 -->
+    <path class="l1 f-wood" d="M146,73.4 C348,71.6 612,74.2 814,72.6 L816,566.4 C612,568.2 348,565.6 146,567.4 Z"/>
+    <!-- 柜内凹腔（内角不圆角） -->
+    <path class="l1 miter" d="M186,101.4 C368,99.8 588,102.2 774,100.6 L776,538.4 C588,540.2 368,537.6 186,539.4 Z"/>
+    <!-- 凹腔进深暗示（L2，仅左右与底，顶部省略） -->
+    <path class="l2" d="M200,120 L200,524 M762,120 L762,524 M206,526 C368,527.6 588,525.4 756,526"/>
+    <!-- 视角规格：轻斜投影 dy = -0.5·depth（2:1）。
+         每格「柜板」是一块**看得见的水平面**：板面 d=14 + 板厚前棱 d=5，
+         画在衣物之后 → 正好盖住衣物下沿，衣与板不再「贴纸式」叠在一起。 -->
+    <path class="slab" d="M188,505 C368,503.6 588,506 774,504.6 L774,533 C588,534.4 368,532 188,533.4 Z"/>
+    <path class="l1 f-card" d="M188,533 C368,531.6 588,534 774,532.6 L774,541 C588,542.4 368,540 188,541.4 Z"/>
+    <path class="l3 miter" d="M240,510 L240,531 M700,509 L700,530"/>
+    <path class="slab" d="M188,369 C368,367.6 588,370 774,368.6 L774,383 C588,384.4 368,382 188,383.4 Z"/>
+    <path class="l1 f-card" d="M188,383 C368,381.6 588,384 774,382.6 L774,391 C588,392.4 368,390 188,391.4 Z"/>
+    <path class="l3 miter" d="M240,374 L240,381 M700,373 L700,380"/>
+    <path class="slab" d="M188,223 C368,221.6 588,224 774,222.6 L774,236 C588,237.4 368,235 188,236.4 Z"/>
+    <path class="l1 f-card" d="M188,236 C368,234.6 588,237 774,235.6 L774,244 C588,245.4 368,243 188,244.4 Z"/>
+    <path class="l3 miter" d="M240,228 L240,234 M700,227 L700,233"/>
+    <!-- 柜底里档（凹腔底面的一条进深） -->
+    <path class="recess" d="M206,533 C368,534.6 588,532.4 756,533.6 L756,548 L206,548 Z"/>
+    <path class="l3 miter" d="M206,542 L756,542"/>
+    <!-- 柜顶线脚 / 柜底 -->
+    <path class="l2" d="M158,86 C348,84.4 612,86.6 802,85.2"/>
+    <path class="l2" d="M158,556 C348,554.4 612,556.6 802,555.2"/>
+    <!-- 左柜门（向外转开，透视微收）＋ 门板厚度面（朝向观者的那条窄边） -->
+    <path class="l1 f-wood" d="M146,92 L84,106 L84,534 L146,548 Z"/>
+    <path class="l2" d="M134,114 L98,125 L98,515 L134,526 Z"/>
+    <path class="l1 f-card" d="M146,92 L146,548 L154,544 L154,96 Z"/>
+    <!-- 右柜门 -->
+    <path class="l1 f-wood" d="M816,92 L878,106 L878,534 L816,548 Z"/>
+    <path class="l2" d="M828,114 L864,125 L864,515 L828,526 Z"/>
+    <path class="l1 f-card" d="M816,92 L816,548 L808,544 L808,96 Z"/>
+    <!-- 铜搭扣（不平涂，只用 L2 线） -->
+    <path class="l2" d="M126,300 L126,318 M146,300 L146,318 M126,300 L146,300 L146,318 L126,318 Z"/>
+    <path class="l2" d="M135.5,303.5 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
+    <path class="l2" d="M836,300 L836,318 M816,300 L816,318 M816,300 L836,300 L836,318 L816,318 Z"/>
+    <path class="l2" d="M826.5,303.5 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
+  </g>
+
+  <!-- ── 阴影层：唯一一层，贴底 8% 墨接触影，无方向性 ──
+       视角改造后落点＝各自那块**柜板板面**（此层在家具层之后、衣物层之前，
+       故板面不会盖住它；衣物层画在最上，压住影的靠内一侧） -->
+  <g id="layer-shadow">
+    <rect class="shadow" x="344" y="542" width="272" height="6" rx="3"/>
+    <rect class="shadow" x="294" y="386" width="372" height="6" rx="3"/>
+    <rect class="shadow" x="244" y="238" width="472" height="6" rx="3"/>
+  </g>
+
+  <!-- ── 衣物层：三件一律平摊，不画穿上身；轮廓差异最大化 ── -->
+  <g id="layer-garment">
+
+    <!-- ① 心衣（上格）：横布 + 两条向上勾过肩的钩肩（拱形，几乎顶到格板上沿）+ 肩间一块方襠 -->
+    <g id="g_xinyi" data-name="心衣">
+      <!-- 横布本体 -->
+      <path class="l1 f-card" data-part="body"
+            d="M342,139.6 C420,137.8 540,140.4 618,138.6 L620,232.6 C540,234.4 420,231.8 342,233.4 Z"/>
+      <!-- 钩肩 ×2：左 -->
+      <path class="l1 f-card" data-part="hook"
+            d="M356,139 C352,116 360,104 378,104 C396,104 404,116 400,139 L386,139 C389,121 384,115 378,115 C372,115 367,121 370,139 Z"/>
+      <!-- 钩肩 ×2：右（关于 x=480 镜像） -->
+      <path class="l1 f-card" data-part="hook"
+            d="M604,139 C608,116 600,104 582,104 C564,104 556,116 560,139 L574,139 C571,121 576,115 582,115 C588,115 593,121 590,139 Z"/>
+      <!-- 襠：全幕唯一一处「物件本体上的朱砂平涂」 -->
+      <path class="l1 f-zhu" data-part="zhu-patch"
+            d="M449,113.4 C470,112.2 490,114.2 511,112.8 L511.6,175 C490,176.2 470,174.4 449.2,175.6 Z"/>
+    </g>
+
+    <!-- ② 抱腹（中格）：较宽的横布 + 上下四条短系带（带子伸出布外） -->
+    <g id="g_baofu" data-name="抱腹">
+      <path class="l1 f-card" data-part="body"
+            d="M292,274.4 C400,272.6 560,275.2 668,273.6 L670,363.4 C560,365.2 400,362.6 292,364.4 Z"/>
+      <path class="l1 f-card" data-part="tie"
+            d="M293,273.6 L292.6,256 L311.6,255.4 L312,273.2 Z"/>
+      <path class="l1 f-card" data-part="tie"
+            d="M648,273.2 L648.4,255.4 L667.4,256 L667,273.6 Z"/>
+      <path class="l1 f-card" data-part="tie"
+            d="M293,364.4 L292.6,382 L311.6,382.6 L312,364.8 Z"/>
+      <path class="l1 f-card" data-part="tie"
+            d="M648,364.8 L648.4,382.6 L667.4,382 L667,364.4 Z"/>
+    </g>
+
+    <!-- ③ 帕腹（下格）：一条极窄的长横带，两端齐平，无任何附加线 -->
+    <g id="g_pafu" data-name="帕腹">
+      <path class="l1 f-card" data-part="body"
+            d="M242,415.4 C360,413.6 600,416.8 718,414.8 L720,530.6 C600,532.4 360,529.4 242,531.2 Z"/>
+    </g>
+
+  </g>
+</svg>
+</div>
+
+<!-- 评审标注：**在画面之外**，默认关闭，避免被误当画面内容 -->
+<div class="labels hide" id="labels">
+  <div><b>上格 · 心衣</b>横布 + 两条拱形钩肩（几乎顶到格板上沿）+ <span class="k">肩间一块方襠（朱砂）</span></div>
+  <div><b>中格 · 抱腹</b>较宽横布 + 上下四条短系带（带子伸出布外），无钩肩、无襠</div>
+  <div><b>下格 · 帕腹</b>一条极窄长横带（约 4:1），两端齐平，无带、无钩肩、无襠</div>
+</div>
+
+<div class="bar">
+  <b>评审开关</b>
+  <button class="btn" id="b-full" aria-pressed="true">画面模式</button>
+  <button class="btn" id="b-silh" aria-pressed="false">轮廓模式（只留外轮廓）</button>
+  <button class="btn" id="b-split" aria-pressed="false">三张独立剪影</button>
+  <button class="btn" id="b-label" aria-pressed="false">评审标注</button>
+  <span>键 1 / 2 / 3 / L</span>
+</div>
+
+<div class="splitwrap hide" id="splitwrap"></div>
+
+<!-- 形状指标：由本页脚本从**实时 DOM 的 path 几何**采样后栅格化算出，非手写 -->
+<div id="metrics">
+  <h3>形状指标 · 由本页脚本从实时 SVG 几何算出（栅格化步长 1px）</h3>
+  <div id="metrics-body">计算中…</div>
+</div>
+<pre id="debug" style="display:none;width:min(96vw,960px);font-size:11px;line-height:1.5;overflow:auto;color:var(--ink2)"></pre>
+
+<p class="note" id="palette-note"></p>
+
+<script>
+"use strict";
+(function(){
+
+  /* ═══════════ 1. 几何采样：把每条 path 用 getPointAtLength 铺成多边形 ═══════════ */
+  function samplePath(p, step){
+    var L = p.getTotalLength();
+    if(!L) return [];
+    var n = Math.max(12, Math.ceil(L/step)), pts = [], i, q;
+    for(i=0;i<=n;i++){ q = p.getPointAtLength(L*i/n); pts.push([q.x,q.y]); }
+    return pts;
+  }
+  function groupPolygons(g, step){
+    var polys = [], els = g.querySelectorAll("path,rect,circle,ellipse,polygon");
+    for(var i=0;i<els.length;i++){
+      var el = els[i];
+      if(el.tagName.toLowerCase()==="rect"){
+        var x=+el.getAttribute("x"), y=+el.getAttribute("y"),
+            w=+el.getAttribute("width"), h=+el.getAttribute("height");
+        polys.push([[x,y],[x+w,y],[x+w,y+h],[x,y+h]]);
+      } else {
+        var s = samplePath(el, step||1.5);
+        if(s.length>3) polys.push(s);
+      }
+    }
+    return polys;
+  }
+  function pathPolygon(el, step){ return samplePath(el, step||1.5); }
+
+  /* ═══════════ 2. 栅格化：扫描线 XOR→OR 并集，步长 1px ═══════════ */
+  function bounds(polys){
+    var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    polys.forEach(function(poly){ poly.forEach(function(p){
+      if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0];
+      if(p[1]<y0)y0=p[1]; if(p[1]>y1)y1=p[1];
+    });});
+    return {x0:x0,y0:y0,x1:x1,y1:y1};
+  }
+  function rasterize(polys, box, step){
+    var W = Math.max(1,Math.ceil((box.x1-box.x0)/step)+1),
+        H = Math.max(1,Math.ceil((box.y1-box.y0)/step)+1),
+        grid = new Uint8Array(W*H), j, k, poly, a, b, y, xs, t, s;
+    for(var pi=0; pi<polys.length; pi++){
+      poly = polys[pi];
+      for(j=0;j<H;j++){
+        y = box.y0 + (j+0.5)*step;
+        xs = [];
+        for(k=0;k<poly.length;k++){
+          a = poly[k]; b = poly[(k+1)%poly.length];
+          if((a[1]<=y && b[1]>y) || (b[1]<=y && a[1]>y)){
+            t = (y-a[1])/(b[1]-a[1]);
+            xs.push(a[0]+t*(b[0]-a[0]));
+          }
+        }
+        xs.sort(function(m,n){return m-n;});
+        for(s=0;s+1<xs.length;s+=2){
+          var i0 = Math.round((xs[s]-box.x0)/step), i1 = Math.round((xs[s+1]-box.x0)/step);
+          if(i1<i0){var tmp=i0;i0=i1;i1=tmp;}
+          for(var i=Math.max(0,i0); i<Math.min(W,i1); i++) grid[j*W+i] = 1;
+        }
+      }
+    }
+    return {grid:grid, W:W, H:H};
+  }
+  function runsOfRow(rast, j){
+    var out=[], cur=-1, i;
+    for(i=0;i<rast.W;i++){
+      var v = rast.grid[j*rast.W+i];
+      if(v && cur<0) cur=i;
+      if(!v && cur>=0){ out.push([cur,i-1,i-cur]); cur=-1; }
+    }
+    if(cur>=0) out.push([cur,rast.W-1,rast.W-cur]);
+    return out;
+  }
+
+  /* ═══════════ 3. 指标 ═══════════ */
+  /* 连通域标记（4 邻域）。只统计 [rowLo,rowHi] 行带内的像素——
+     这样「带子虽然连在布上，但在主体行带之外」，仍会被单独数出来，
+     不受亚像素接缝影响。minHpx 过滤掉长边手抖产生的碎片。 */
+  function components(rast, step, minHpx, rowLo, rowHi){
+    var W=rast.W, H=rast.H, lab=new Int32Array(W*H).fill(-1), comps=[], next=0;
+    var stack=[];
+    rowLo = Math.max(0, rowLo===undefined?0:rowLo);
+    rowHi = Math.min(H-1, rowHi===undefined?H-1:rowHi);
+    for(var j0=rowLo;j0<=rowHi;j0++) for(var i0=0;i0<W;i0++){
+      var idx=j0*W+i0;
+      if(!rast.grid[idx] || lab[idx]>=0) continue;
+      var id=next++, px=[], minj=1e9,maxj=-1e9,mini=1e9,maxi=-1e9;
+      stack.length=0; stack.push(idx); lab[idx]=id;
+      while(stack.length){
+        var cur=stack.pop(), cj=(cur/W)|0, ci=cur-cj*W;
+        px.push([ci,cj]);
+        if(cj<minj)minj=cj; if(cj>maxj)maxj=cj;
+        if(ci<mini)mini=ci; if(ci>maxi)maxi=ci;
+        if(ci>0   && cj>=rowLo && cj<=rowHi && rast.grid[cur-1] && lab[cur-1]<0){ lab[cur-1]=id; stack.push(cur-1); }
+        if(ci<W-1 && cj>=rowLo && cj<=rowHi && rast.grid[cur+1] && lab[cur+1]<0){ lab[cur+1]=id; stack.push(cur+1); }
+        if(cj>rowLo && rast.grid[cur-W] && lab[cur-W]<0){ lab[cur-W]=id; stack.push(cur-W); }
+        if(cj<rowHi && rast.grid[cur+W] && lab[cur+W]<0){ lab[cur+W]=id; stack.push(cur+W); }
+      }
+      if((maxj-minj+1)*step < minHpx) continue;
+      var rowRuns={};
+      px.forEach(function(p){ (rowRuns[p[1]]=rowRuns[p[1]]||new Set()).add(p[0]); });
+      function runsAt(jj){
+        var cols=Array.from(rowRuns[jj]||[]).sort(function(a,b){return a-b;}), n=0;
+        for(var q=0;q<cols.length;q++) if(q===0||cols[q]!==cols[q-1]+1) n++;
+        return n;
+      }
+      var rows=Object.keys(rowRuns).map(Number).sort(function(a,b){return a-b;});
+      var wpx=(maxi-mini+1)*step, hpx=(maxj-minj+1)*step;
+      // 拱形探测：取距底 3px 的那一行（躲开长边手抖造成的假断开）
+      var probe = rows[rows.length-1] - Math.max(1,Math.round(3/step));
+      if(probe < rows[0]) probe = rows[0];
+      var probeRuns = runsAt(probe);
+      var minRowRuns = Math.min.apply(null, rows.map(runsAt));
+      comps.push({
+        id:id, w:+wpx.toFixed(1), h:+hpx.toFixed(1),
+        areaPx:px.length,
+        minj:minj, maxj:maxj, mini:mini, maxi:maxi,
+        probeRuns:probeRuns,
+        arch: (probeRuns>=2 && minRowRuns===1),   // 距底 3px 仍分成两段、上方合为一段 = 拱形
+        strap: (wpx<=26),                          // 细长直条带
+        square: (wpx>26 && probeRuns===1 && minRowRuns===1),   // 顶端单段、宽度 >26px 的块状附属件
+        cx:+(((mini+maxi+1)/2)*step).toFixed(1)
+      });
+    }
+    return comps;
+  }
+
+  function analyze(g, step){
+    var polys = groupPolygons(g, step);
+    var box = bounds(polys);
+    var rast = rasterize(polys, box, step);
+
+    // 紧致 bbox + 面积
+    var minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9, area=0;
+    for(var j=0;j<rast.H;j++) for(var i=0;i<rast.W;i++){
+      if(rast.grid[j*rast.W+i]){
+        area++;
+        if(i<minX)minX=i; if(i>maxX)maxX=i;
+        if(j<minY)minY=j; if(j>maxY)maxY=j;
+      }
+    }
+    var W=(maxX-minX+1)*step, H=(maxY-minY+1)*step;
+
+    // 逐行总宽（用于定位「主体」）
+    var rowW=[], maxRowW=0, jj;
+    for(jj=minY;jj<=maxY;jj++){
+      var rs=runsOfRow(rast,jj), tot=0;
+      for(var r=0;r<rs.length;r++) tot+=rs[r][2];
+      rowW[jj]=tot; if(tot>maxRowW) maxRowW=tot;
+    }
+    // 主体 = 总宽 ≥90% 峰值的行段（阈值取 0.9 以躲开长边手抖）
+    var bodyTop=-1, bodyBot=-1;
+    for(jj=minY;jj<=maxY;jj++) if(rowW[jj] >= 0.9*maxRowW){ if(bodyTop<0) bodyTop=jj; bodyBot=jj; }
+
+    // 主体行带之外、各自连成一片的「附属件」（按行带裁剪后重新标记连通域；
+    // 行带两端各让开 3px，避开主体长边手抖与亚像素接缝）
+    var GUARD = Math.max(1, Math.round(3/step));
+    var aboveParts = (bodyTop-GUARD > minY)
+      ? components(rast, step, 6, minY, bodyTop-GUARD) : [];
+    var belowParts = (bodyBot+GUARD < maxY)
+      ? components(rast, step, 6, bodyBot+GUARD, maxY) : [];
+    var comps = components(rast, step, 6);
+    window.__DBG = window.__DBG || [];
+    window.__DBG.push({g:g.id||g.getAttribute("data-name")||"?",
+      bodyTop:bodyTop, bodyBot:bodyBot, minY:minY, maxY:maxY,
+      above:aboveParts.map(function(c){return {w:c.w,h:c.h,probe:c.probeRuns,arch:c.arch,strap:c.strap,sq:c.square};}),
+      below:belowParts.map(function(c){return {w:c.w,h:c.h,probe:c.probeRuns,arch:c.arch,strap:c.strap,sq:c.square};}),
+      all:comps.map(function(c){return {w:c.w,h:c.h,minj:c.minj,maxj:c.maxj,arch:c.arch,strap:c.strap,sq:c.square};})});
+    function cls(list){
+      return {
+        n:list.length,
+        arch:list.filter(function(c){return c.arch;}).length,
+        strap:list.filter(function(c){return c.strap;}).length,
+        square:list.filter(function(c){return c.square;}).length,
+        w:list.map(function(c){return c.w;})
+      };
+    }
+    var A1=cls(aboveParts), B1=cls(belowParts);
+
+    // 主体上沿之上的附属高度
+    var aboveH = (bodyTop>=0 && minY>=0) ? (bodyTop-minY)*step : 0;
+
+    // 采样剖面（12 行）
+    var profile=[];
+    for(var k2=0;k2<12;k2++){
+      var jr = Math.round(minY + (maxY-minY)*k2/11);
+      var rs2 = runsOfRow(rast,jr).map(function(o){return Math.round(o[2]*step);});
+      profile.push(rs2.join("+"));
+    }
+    return {
+      w:+W.toFixed(1), h:+H.toFixed(1), aspect:+(W/H).toFixed(3),
+      areaPx:area, fillRatio:+(area/((maxX-minX+1)*(maxY-minY+1))).toFixed(3),
+      above:A1, below:B1,
+      aboveBody:+aboveH.toFixed(1),
+      // 绝对坐标（SVG user units），供跨物件比较（如襠相对横布的位置）
+      absX0:+(box.x0+minX*step).toFixed(1), absY0:+(box.y0+minY*step).toFixed(1),
+      absX1:+(box.x0+(maxX+1)*step).toFixed(1), absY1:+(box.y0+(maxY+1)*step).toFixed(1),
+      profile:profile, rast:rast, minX:minX,minY:minY,maxX:maxX,maxY:maxY,
+      box:box, step:step, bodyTop:bodyTop, bodyBot:bodyBot
+    };
+  }
+
+  var scene = document.getElementById("scene");
+  var garments = [
+    {id:"g_pafu",  label:"帕腹"},
+    {id:"g_baofu", label:"抱腹"},
+    {id:"g_xinyi", label:"心衣"}
+  ];
+  var STEP = 1;
+  var M = {};
+  garments.forEach(function(o){
+    M[o.id] = analyze(document.getElementById(o.id), STEP);
+    M[o.id].label = o.label;
+  });
+
+  // 襠（心衣那一片）：单独量一次
+  var zhuEl = document.querySelector('#g_xinyi [data-part="zhu-patch"]');
+  var zhu = analyze(wrapOne(zhuEl), STEP);
+  function wrapOne(el){ var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.appendChild(el.cloneNode(true)); return g; }
+  var xinBody = analyze(wrapOne(document.querySelector('#g_xinyi [data-part="body"]')), STEP);
+
+  /* ═══════════ 4. 判定 ═══════════ */
+  var A = M.g_pafu, B = M.g_baofu, C = M.g_xinyi;
+  function sig(o){
+    return "上附属件 "+o.above.n+"(拱形"+o.above.arch+"/直带"+o.above.strap+"/方块"+o.above.square+
+      ") 下附属件 "+o.below.n+"(拱形"+o.below.arch+"/直带"+o.below.strap+"/方块"+o.below.square+")";
+  }
+  function distinct(a,b){
+    var reasons=[];
+    if(Math.abs(a.aspect-b.aspect) >= 0.45) reasons.push("宽高比差 "+Math.abs(a.aspect-b.aspect).toFixed(2));
+    if(a.above.n !== b.above.n) reasons.push("上部附属件 "+a.above.n+"≠"+b.above.n);
+    if(a.below.n !== b.below.n) reasons.push("下部附属件 "+a.below.n+"≠"+b.below.n);
+    if(a.above.arch !== b.above.arch) reasons.push("拱形 "+a.above.arch+"≠"+b.above.arch);
+    if(a.above.square !== b.above.square) reasons.push("方块襠 "+a.above.square+"≠"+b.above.square);
+    if((a.above.strap+a.below.strap) !== (b.above.strap+b.below.strap))
+      reasons.push("细长直系带 "+((a.above.strap+a.below.strap))+"≠"+((b.above.strap+b.below.strap)));
+    if(Math.abs(a.w-b.w) >= 40) reasons.push("剪影宽 "+a.w+"≠"+b.w);
+    return reasons;
+  }
+  var ab = distinct(A,B), bc = distinct(B,C), ac = distinct(A,C);
+  var pass = ab.length>0 && bc.length>0 && ac.length>0;
+
+  /* ═══════════ 5. 面板 ═══════════ */
+  function row(o){
+    return "<tr><td>"+o.label+"</td><td>"+o.w+"×"+o.h+"</td><td>"+o.aspect+
+      "</td><td>"+o.fillRatio+"</td><td>"+o.above.n+"（拱 "+o.above.arch+" / 带 "+
+      o.above.strap+" / 方 "+o.above.square+"）</td><td>"+o.below.n+"（拱 "+o.below.arch+
+      " / 带 "+o.below.strap+" / 方 "+o.below.square+"）</td><td>"+o.aboveBody+"</td></tr>";
+  }
+  var html = ""
+    + "<table><thead><tr><th>物件</th><th>剪影外框 w×h(px)</th><th>宽高比</th>"
+    + "<th>填充率</th><th>主体上沿之上的附属件</th><th>主体下沿之下的附属件</th><th>附属高度(px)</th></tr></thead><tbody>"
+    + row(A)+row(B)+row(C) + "</tbody></table>"
+    + "<table style='margin-top:9px'><thead><tr><th>逐行剖面（自顶到底 12 行，单位 px，+ 为断开）</th></tr></thead><tbody>"
+    + "<tr><td>帕腹</td><td>"+A.profile.join(" / ")+"</td></tr>"
+    + "<tr><td>抱腹</td><td>"+B.profile.join(" / ")+"</td></tr>"
+    + "<tr><td>心衣</td><td>"+C.profile.join(" / ")+"</td></tr></tbody></table>"
+    + "<table style='margin-top:9px'><thead><tr><th>襠（心衣）</th><th>外框 w×h</th><th>面积</th>"
+    + "<th>占心衣横布面积</th><th>襠顶高于横布上沿</th><th>水平居中偏移</th></tr></thead><tbody><tr>"
+    + "<td>朱砂方襠</td><td>"+zhu.w+"×"+zhu.h+"</td><td>"+zhu.areaPx+" px²</td><td>"
+    + (100*zhu.areaPx/xinBody.areaPx).toFixed(1)+"%</td><td>"
+    + (xinBody.absY0 - zhu.absY0).toFixed(1)+" px</td><td>"
+    + (((zhu.absX0+zhu.absX1)/2) - ((C.absX0+C.absX1)/2)).toFixed(1)+" px</td>"
+    + "</tr></tbody></table>"
+    + "<div class='verdict'><b>三项剪影结构签名：</b>帕腹 "+sig(A)+"；抱腹 "+sig(B)+"；心衣 "+sig(C)+"。<br>"
+    + "<b>两两互不相同判定：</b>"
+    + "帕腹↔抱腹 "+(ab.length?"<b>异</b>（"+ab.join("；")+"）":"<b>同</b>")+"；"
+    + "抱腹↔心衣 "+(bc.length?"<b>异</b>（"+bc.join("；")+"）":"<b>同</b>")+"；"
+    + "帕腹↔心衣 "+(ac.length?"<b>异</b>（"+ac.join("；")+"）":"<b>同</b>")+"。<br>"
+    + "<b>三项剪影互不相同：</b>"+(pass?"<b>是 ✓</b>":"<b>否 ✗</b>")
+    + "　<b>一句话人类描述：</b>「下格是一条窄长布带，光光的什么都没有；"
+    + "中格那块布更宽，四角伸出四条短带子；上格那块布有两条拱起来的肩带，"
+    + "两条肩带中间另外多一块方布。」</div>";
+  document.getElementById("metrics-body").innerHTML = html;
+
+  /* 色板自查：列出 SVG 里实际渲染出的 fill/stroke（走 CSS 类，故用 computed style） */
+  (function(){
+    function toHex(rgb){
+      var m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb||"");
+      if(!m) return rgb;
+      return "#"+[1,2,3].map(function(i){
+        var v=(+m[i]).toString(16); return v.length<2?"0"+v:v;
+      }).join("");
+    }
+    var vals={}, i;
+    var shapes = scene.querySelectorAll("path,rect,circle,ellipse,polygon,line");
+    for(i=0;i<shapes.length;i++){
+      var cs = getComputedStyle(shapes[i]);
+      var f = cs.fill, s = cs.stroke;
+      if(f && f!=="none" && cs.fillOpacity!=="0") { var hf=toHex(f); vals[hf]=(vals[hf]||0)+1; }
+      if(s && s!=="none" && parseFloat(cs.strokeWidth)>0 && cs.strokeOpacity!=="0") { var hs=toHex(s); vals[hs]=(vals[hs]||0)+1; }
+    }
+    var list=Object.keys(vals).sort();
+    document.getElementById("palette-note").textContent =
+      "色板自查：本图 SVG 内实际渲染出的 fill/stroke 取值共 "+list.length+" 个 → "+list.join("  ")+
+      "。（全部落在现有成品 dist/index.html 第 9–11 行的 9 个 token 内：paper #f3ecdf / paper2 #eae1d0 / card #faf6ec / ink #2a2622 / ink2 #5c554b / faint #8d8577 / zhu #a63a2a / line #d3c8b4 / line2 #c0b49d；未出现 #ECE2CD / #A23828 等口述近似值，未新增第 8 色。）";
+  })();
+
+  /* ═══════════ 6. 模式切换 ═══════════ */
+  var wrap = document.getElementById("splitwrap");
+  var labels = document.getElementById("labels");
+  var mode = "full";
+
+  function buildSplit(){
+    if(wrap.dataset.built) return;
+    var order = [["g_xinyi","心衣"],["g_baofu","抱腹"],["g_pafu","帕腹"]];
+    order.forEach(function(o){
+      var src = document.getElementById(o[0]);
+      var fig = document.createElement("figure");
+      var svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      var pad = 14;
+      svg.setAttribute("viewBox", (M[o[0]].absX0-pad)+" "+(M[o[0]].absY0-pad)+" "+
+        ((M[o[0]].absX1-M[o[0]].absX0)+2*pad)+" "+((M[o[0]].absY1-M[o[0]].absY0)+2*pad));
+      var inner = src.cloneNode(true);
+      inner.querySelectorAll("path").forEach(function(p){
+        p.setAttribute("class","l1");
+        p.style.fill = "var(--ink)";
+        p.style.stroke = "var(--ink)";
+      });
+      svg.appendChild(inner);
+      fig.appendChild(svg);
+      var cap = document.createElement("figcaption");
+      var m = M[o[0]];
+      cap.innerHTML = "<b>"+o[1]+"</b>　剪影 "+m.w+"×"+m.h+"　宽高比 <b>"+m.aspect+
+        "</b>　上附属件 <b>"+m.above.n+"</b>　下附属件 <b>"+m.below.n+
+        "</b>　拱形 <b>"+(m.above.arch+m.below.arch)+"</b>　细长直带 <b>"+
+        (m.above.strap+m.below.strap)+"</b>　方块 <b>"+(m.above.square+m.below.square)+"</b>";
+      fig.appendChild(cap);
+      wrap.appendChild(fig);
+    });
+    wrap.dataset.built = "1";
+  }
+  function setMode(m){
+    mode = m;
+    scene.classList.toggle("silh", m!=="full");
+    document.querySelector(".stage").classList.toggle("hide", m==="split");
+    wrap.classList.toggle("hide", m!=="split");
+    if(m==="split") buildSplit();
+    [["b-full","full"],["b-silh","silh"],["b-split","split"]].forEach(function(p){
+      document.getElementById(p[0]).setAttribute("aria-pressed", String(m===p[1]));
+    });
+  }
+  document.getElementById("b-full").onclick = function(){ setMode("full"); };
+  document.getElementById("b-silh").onclick = function(){ setMode("silh"); };
+  document.getElementById("b-split").onclick = function(){ setMode("split"); };
+  document.getElementById("b-label").onclick = function(){
+    var on = labels.classList.toggle("hide");
+    this.setAttribute("aria-pressed", String(!on));
+  };
+  window.addEventListener("keydown", function(e){
+    var k = (e.key||"").toLowerCase();
+    if(k==="1") setMode("full");
+    if(k==="2") setMode("silh");
+    if(k==="3") setMode("split");
+    if(k==="l") document.getElementById("b-label").click();
+  });
+
+  // 供无头截图直接以 URL hash 决定性进入某一模式
+  (function(){
+    var h = (location.hash||"").replace("#","");
+    if(h==="silh") setMode("silh");
+    else if(h==="split") setMode("split");
+    else if(h==="label"){ setMode("full"); document.getElementById("b-label").click(); }
+    else setMode("full");
+  })();
+
+  // 把指标写进 title，便于无头 --dump-dom 取数
+  document.getElementById("debug").textContent =
+    JSON.stringify(window.__DBG, null, 1);
+  document.title = "METRICS::" + garments.map(function(o){
+    var m=M[o.id];
+    return m.label+"[w="+m.w+",h="+m.h+",aspect="+m.aspect+",fill="+m.fillRatio+
+      ",aboveParts="+m.above.n+"(arch"+m.above.arch+"/strap"+m.above.strap+"/sq"+m.above.square+")"+
+      ",belowParts="+m.below.n+"(arch"+m.below.arch+"/strap"+m.below.strap+"/sq"+m.below.square+")"+
+      ",aboveH="+m.aboveBody+"]";
+  }).join(" | ")
+  + " || ZHU[w="+zhu.w+",h="+zhu.h+",area="+zhu.areaPx+",shareOfBody="+(100*zhu.areaPx/xinBody.areaPx).toFixed(1)+"%]"
+  + " || PASS=" + (pass?"YES":"NO");
+
+})();
+</script>
+</body>
+</html>

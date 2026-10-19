@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 類書庫 · 第六幕</title>
+<style>
+  /* ══ 色板：与第一–五幕、第八幕逐字相同 —— 9 个 token + 既有平涂旧木 #b9a88c，不新增颜色 ══ */
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    --l1:2.2px; --l2:1.4px; --l3:0.9px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    display:flex; align-items:center; justify-content:center; padding:8px;
+  }
+  /* 三上界：不超容器、不超 1200 设计宽、**高度**不超（(100vh − 88px) × 1200/720）。
+     只按宽度做的旧版在 1214×650 上会把上下两头切掉（修前实测 stage.top = −60，且有竖向滚动条）。*/
+  #app{width:min(100%,1200px,calc((100vh - 88px) * 1.66667));min-height:0;display:flex;flex-direction:column}
+  #stage{display:block;width:100%;height:auto;aspect-ratio:1200/720;background:var(--paper);overflow:hidden}
+  #hud{flex:0 0 64px;height:64px;display:flex;align-items:center;gap:14px;
+       background:var(--paper);border-top:1px solid var(--line2);padding:0 6px}
+  #slots{display:flex;gap:4px}
+  .slot{width:56px;height:56px;border:1px solid transparent;position:relative;cursor:default}
+  .slot .under{position:absolute;left:8px;right:8px;bottom:6px;height:1px;background:var(--line2)}
+  .slot svg{display:block;width:52px;height:52px;margin:1px;transition:transform 120ms ease}
+  .slot.has{cursor:pointer}
+  .slot.sel{border-color:var(--zhu)}
+  .slot.sel svg{transform:translateY(-2px)}
+  #caption{margin-left:auto;margin-right:8px;max-width:62%;
+           font-family:"Kaiti SC","STKaiti","KaiTi",serif;
+           font-size:13px;line-height:1.6;color:var(--ink2);text-align:right;
+           opacity:0;transition:opacity 500ms ease}
+  #caption.on{opacity:1}
+  #caption.zhu{color:var(--zhu)}
+
+  /* ══ 线宽三级（与前几幕同值；vector-effect 保证跨视图/跨缩放不漂移）══ */
+  .l1{stroke:var(--ink);stroke-width:var(--l1);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l2{stroke:var(--ink2);stroke-width:var(--l2);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l3{stroke:var(--faint);stroke-width:var(--l3);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .miter{stroke-linejoin:miter}
+  .f-wood{fill:#b9a88c}
+  .f-card{fill:var(--card)}
+  .f-zhu{fill:var(--zhu)}
+  .tx{fill:var(--ink);font-family:"Songti SC","STSong",Georgia,serif}
+  .tx-k{fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .tx-z{fill:var(--zhu);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .shadow{fill:var(--ink);opacity:.08;stroke:none;pointer-events:none}
+
+  /* ══ 视图切换（本幕 2 个视图：類書庫全景 + 對勘案近景；台账与过渡页是覆盖层）══ */
+  .view{opacity:0;pointer-events:none;transition:opacity 500ms ease}
+  .view.active{opacity:1;pointer-events:auto}
+
+  /* ══ 命中（修正）：非活動層的整棵子樹都不接鼠標 ═══════════════════════════
+     病灶不在「層」，在「層裏那些透明 .hit」：`.hs .hit{pointer-events:all}` 是**顯式值**，
+     壓得過祖先 `.view{pointer-events:none}` 的繼承；而 `opacity:0` 的元素**照樣參與命中測試**。
+     於是收起的 #ledger、關掉的 #bridge、沒進去的 #view-close 裏那些看不見的矩形，
+     仍在**文檔順序更後**的位置接得住鼠標 —— 點這一件，被那一件截胡。
+     下面五行按「層狀態」把整棵子樹釘死；**不動任何一條 .hit 的既有寫法**，
+     `#auto` 自檢仍走同一條路。 */
+  .view:not(.active), .view:not(.active) *{pointer-events:none!important}
+  #ledger:not(.on), #ledger:not(.on) *{pointer-events:none!important}
+  #bridge:not(.on), #bridge:not(.on) *{pointer-events:none!important}
+  .paper:not(.show), .paper:not(.show) *{pointer-events:none!important}
+  #world.modal .view, #world.modal .view *{pointer-events:none!important}
+  #paper-layer{pointer-events:none}
+  #paper-layer .paper.show{pointer-events:auto}
+
+  /* ══ 热点：默认 / 可点 / 已取 三态光标 ══ */
+  .hs{cursor:default}
+  .hs .hit{fill:transparent;stroke:none;pointer-events:all}
+  .hs .art{pointer-events:none}
+  .hs.on .hit{cursor:pointer}
+  .hs.on:hover .art path,.hs.on:hover .art rect,.hs.on:hover .art circle,
+  .hs.on:hover .art ellipse,.hs.on:hover .art line,.hs.on:hover .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.armed .art path,.hs.armed .art rect,.hs.armed .art circle,
+  .hs.armed .art ellipse,.hs.armed .art line,.hs.armed .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.on:hover .art text,.hs.armed .art text{fill:var(--zhu)}
+  .hs.gone, .hs.gone *{pointer-events:none}
+  .hs.gone .art{opacity:0}
+  .hs.breathe .art *{stroke:var(--zhu)!important;animation:breathe 1.2s ease-in-out 2}
+  @keyframes breathe{0%,100%{stroke-opacity:1}50%{stroke-opacity:.4}}
+
+  /* ══ 视角规格（§十二）：屏幕坐标 = 正面坐标 + 深度·(0,−0.5)，k = 0.5 ══
+     本幕深度预算：書庫地面随画面裁切 / 書架層板進深 40（帶高 20）/
+     對勘案台面進深 80（帶高 40，＝本幕上限）/ 書函頂面進深 24（帶高 12）/
+     紙層叠压的那張散頁進深 0（它是**壓在書上的另一張紙**，竖直面）。**全部 ≤ 80。** */
+  .floor{fill:var(--paper2);stroke:none}
+  .slab{fill:var(--card)}
+  .recess{fill:var(--paper2);stroke:none}
+
+  /* ══ 世界变化 ① 兩條頁邊引線（位置即是强调；一字之差只能靠位置）══ */
+  #lead-a{stroke-dasharray:300;stroke-dashoffset:300;transition:stroke-dashoffset 520ms ease}
+  #lead-a.on{stroke-dashoffset:0}
+  #lead-b{stroke-dasharray:360;stroke-dashoffset:360;transition:stroke-dashoffset 520ms ease}
+  #lead-b.on{stroke-dashoffset:0}
+  #btn-a,#btn-b{opacity:0;transition:opacity 300ms ease}
+  #btn-a.on,#btn-b.on{opacity:1}
+  /* ══ 世界变化 ② 引線槽裡現出異文字（同一個字位，不同字形）══ */
+  /* ══ 世界变化 ③ 兩存朱線：把兩條引線并置，不判其孰是 ══ */
+  #keepline{opacity:0;transition:opacity 420ms ease}
+  #keepline.on{opacity:1}
+  /* ══ 世界变化 ④ 底本牌落位後，乙本那一句上現一條朱線（標的是「轉抄的痕」）══ */
+  #trace-b{opacity:0;transition:opacity 420ms ease}
+  #trace-b.on{opacity:1}
+  /* ══ 錯法：牌沿槽邊彈回 / 順錄文頁邊滑落（現場變化，牌不消失、可立即重放）══ */
+  @keyframes shake{0%,100%{transform:translateX(0)}35%{transform:translateX(-3px)}70%{transform:translateX(3px)}}
+  .shaking{animation:shake 130ms ease-in-out 2}
+  @keyframes fall{0%{opacity:1}100%{opacity:0}}
+  #card-ghost{opacity:0}
+  #card-ghost.fall{animation:fall 520ms ease-in forwards}
+  #card-ghost.at-edge{transform:translate(430px,330px)}
+  /* ══ 錯法累到三次：案上留一塊 12% 朱砂指印（不是新色）══ */
+  #print{opacity:0;transition:opacity 300ms ease}
+  #print.show{opacity:1}
+  /* ══ 拿在手上的東西離位微抬 ══ */
+  .lift .art{opacity:.72}
+
+  /* ══ 纸（在場景內放大展開，不切屏、不加暗底遮罩）══ */
+  .paper{opacity:0;pointer-events:none;transition:opacity 260ms ease}
+  .paper.show{opacity:1;pointer-events:auto}
+  .paper-title{font-size:21px;fill:var(--ink);letter-spacing:.18em}
+  .paper-sub{font-size:12.5px;fill:var(--faint);letter-spacing:.1em}
+  .paper-body{font-size:16px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.02em}
+  .paper-body .key{font-size:18px}
+  .paper-close{font-size:12px;fill:var(--faint);letter-spacing:.08em}
+
+  /* ══ 外殼：典藏司「值房台账」（与前几幕同一套）══ */
+  #ledger{opacity:0;pointer-events:none;transition:opacity 420ms ease}
+  #ledger.on{opacity:1;pointer-events:auto}
+  .led-lede{font-size:26px;fill:var(--ink);letter-spacing:.22em}
+  .led-sub{font-size:13px;fill:var(--faint);letter-spacing:.12em}
+  .led-item{font-size:19px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.04em}
+  .led-item.done{fill:var(--faint)}
+  .led-act{font-size:21px;fill:var(--ink);letter-spacing:.2em}
+  .led-hint{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  #bridge{opacity:0;pointer-events:none;transition:opacity 380ms ease}
+  #bridge.on{opacity:1;pointer-events:auto}
+  .br-lede{font-size:22px;fill:var(--ink);letter-spacing:.2em}
+  .br-body{font-size:16px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .br-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+
+  #boot{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+        justify-content:center;font-size:15px;color:var(--ink2);letter-spacing:.3em;z-index:9}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+
+<div id="boot">類書庫</div>
+
+<div id="app">
+  <svg id="stage" viewBox="0 0 1200 720" shape-rendering="geometricPrecision"
+       xmlns="http://www.w3.org/2000/svg" role="application" aria-label="典藏司類書庫 第六幕">
+    <defs>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="n"/>
+        <feColorMatrix in="n" type="saturate" values="0"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+    <g id="world">
+
+      <!-- ══════════════════ view-room：類書庫（全景）══════════════════
+           同一台虚拟相机、同一斜率 k=0.5（§十二）。进深预算全部 ≤ 80（见样式表注释）。
+           本幕不比一字之**义**，只比一字之**位** —— 兩本同摆，字位相對。 -->
+      <g id="view-room" class="view active">
+
+        <!-- ① 書庫地面（水平面）：远边在墙脚 y≈580，近边落在画面之外 -->
+        <path class="floor" d="M40,580.4 C300,578.6 700,581.2 1160,579.6 L1160,726 L40,726 Z"/>
+        <path class="l3 miter" d="M150,652 C400,650.6 800,653 1090,650.8"/>
+        <path class="l2" d="M40,580.6 C300,578.8 700,581.4 1160,579.8"/>
+
+        <!-- A 書架（兩部類書就攤在架下的對勘案上；架只做背景）-->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 f-wood" d="M40,56.4 C400,54.6 800,57.2 1160,55.6 L1160,72.4
+            C800,74.2 400,71.6 40,73.4 Z"/>
+          <path class="l1 f-wood" d="M96,72.4 C300,70.6 500,73.2 700,71.6 L700,420.4
+            C500,422.2 300,419.6 96,421.4 Z"/>
+          <path class="l1 miter slab" d="M96,168.4 C300,166.6 500,169.2 700,167.6 L700,188.4
+            C500,190.2 300,187.6 96,189.4 Z"/>
+          <path class="l1 miter slab" d="M96,296.4 C300,294.6 500,297.2 700,295.6 L700,316.4
+            C500,318.2 300,315.6 96,317.4 Z"/>
+          <path class="l3 miter" d="M120,108 L676,108 M120,132 L600,132 M120,232 L664,232
+            M120,256 L580,256 M120,360 L640,360 M120,384 L556,384"/>
+        </g>
+
+        <!-- B 架前：「類書庫體例」一纸（翻書可查；本幕自撰，非古籍引文）-->
+        <g id="hs_rule" class="hs on" data-hs="h_rule">
+          <rect class="hit" x="724" y="96" width="196" height="160"/>
+          <g class="art">
+            <path class="l1 f-card" d="M732,104.4 C786,102.6 858,105.2 910,103.6 L911,254.4
+              C858,256.2 786,253.6 732,255.4 Z"/>
+            <text class="tx-k" x="821" y="132" font-size="14" text-anchor="middle">類書庫體例</text>
+            <path class="l3 miter" d="M748,158 L894,158 M748,184 L868,184 M748,210 L882,210 M748,236 L860,236"/>
+          </g>
+        </g>
+
+        <!-- C 架前：「校勘之例」一紙（承第三幕的「對照」；本幕把它做成「並置則自見」）-->
+        <g id="hs_rule2" class="hs on" data-hs="h_rule2">
+          <rect class="hit" x="944" y="96" width="196" height="160"/>
+          <g class="art">
+            <path class="l1 f-card" d="M952,104.4 C1006,102.6 1078,105.2 1130,103.6 L1131,254.4
+              C1078,256.2 1006,253.6 952,255.4 Z"/>
+            <text class="tx-k" x="1041" y="132" font-size="14" text-anchor="middle">校勘之例</text>
+            <path class="l3 miter" d="M968,158 L1114,158 M968,184 L1088,184 M968,210 L1102,210 M968,236 L1080,236"/>
+          </g>
+        </g>
+
+        <!-- D 對勘案（台面進深 80 → 帶高 40）：兩部類書并列摊开在案上
+             圖元全部由脚本按「逐字对照」的同一套坐标规则生成（見 buildBooks()）-->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 miter slab" d="M60,432.4 C400,430.6 800,433.2 1140,431.6 L1140,472.4
+            C800,474.2 400,471.6 60,473.4 Z"/>
+          <path class="l3 miter" d="M100,450 C400,448.4 800,451 1100,449.4"/>
+          <path class="l1 f-card" d="M60,472.4 C400,470.6 800,473.2 1140,471.6 L1140,712.4
+            C800,714.2 400,711.6 60,713.4 Z"/>
+          <path class="l1 f-wood" d="M84,712.4 C200,710.6 300,713.2 372,711.6 L372,720.4
+            C300,722.2 200,719.6 84,721.4 Z"/>
+          <path class="l1 f-wood" d="M828,712.4 C900,710.6 1000,713.2 1116,711.6 L1116,720.4
+            C1000,722.2 900,719.6 828,721.4 Z"/>
+        </g>
+
+        <!-- E 走近對勘案（進近景；熱區與案上諸物都不相鄰）-->
+        <g id="hs_go" class="hs on" data-hs="h_go">
+          <rect class="hit" x="470" y="612" width="260" height="56"/>
+          <g class="art">
+            <path class="l1 miter" d="M480,618 C560,616.4 640,619 720,617.4 L720,662
+              C640,663.6 560,661 480,662.6 Z"/>
+          </g>
+          <text class="led-act" x="600" y="650" text-anchor="middle" font-size="17">走 近 對 勘 案</text>
+        </g>
+
+        <!-- F 案上的物：兩部類書的書函（只是背景，真正摊开的書頁在近景）-->
+        <g class="scenery" pointer-events="none">
+          <path class="l1 f-wood" d="M150,376.4 C240,374.6 340,377.2 420,375.6 L420,428.4
+            C340,430.2 240,427.6 150,429.4 Z"/>
+          <path class="l3 miter" d="M180,392 L392,392 M180,410 L360,410"/>
+          <path class="l1 f-wood" d="M520,376.4 C610,374.6 710,377.2 790,375.6 L790,428.4
+            C710,430.2 610,427.6 520,429.4 Z"/>
+          <path class="l3 miter" d="M550,392 L762,392 M550,410 L730,410"/>
+          <text class="tx-k" x="285" y="366" font-size="13" text-anchor="middle" fill="var(--ink2)">太平御覽</text>
+          <text class="tx-k" x="655" y="366" font-size="13" text-anchor="middle" fill="var(--ink2)">北堂書鈔</text>
+        </g>
+
+        <!-- G 錯法累到三次：案上留一塊 12% 朱砂指印（不是新色）-->
+        <g id="print" pointer-events="none">
+          <ellipse cx="1052" cy="640" rx="16" ry="21" fill="var(--zhu)" opacity=".12"/>
+          <ellipse cx="1070" cy="648" rx="10" ry="14" fill="var(--zhu)" opacity=".12"/>
+        </g>
+
+        <!-- 案沿的接觸影（唯一一层阴影：贴底 8% 墨、无方向性、每处一层）-->
+        <rect class="shadow" x="66" y="708" width="1068" height="8" rx="3"/>
+      </g>
+
+      <!-- ══════════════════ view-close：對勘案近景（本幕的主要交互）══════════════════
+           甲本在上层纸、乙本在下层纸，中间那张**散頁**同时压住兩本 —— 这就是「纸层叠压」。
+           一字之差**只用位置**强调：同一個字位、兩條頁邊引線。 -->
+      <g id="view-close" class="view">
+
+        <!-- 對勘案（近景台面，進深 80 → 帶高 40）-->
+        <path class="l1 miter slab" d="M40,116.4 C400,114.6 800,117.2 1160,115.6 L1160,156.4
+          C800,158.2 400,155.6 40,157.4 Z"/>
+        <path class="l3 miter" d="M80,136 C400,134.4 800,137 1120,135.4"/>
+        <path class="l1 f-card" d="M40,156.4 C400,154.6 800,157.2 1160,155.6 L1160,700.4
+          C800,702.2 400,699.6 40,701.4 Z"/>
+
+        <!-- A 乙本（**下层纸**）：版框 x 700..1180，中缝 x 920
+             左頁 700..920（被散頁压住一截）、右頁 920..1180（正文全在右頁）
+             正文版心 x0=934、字距 18、字号 14；行高 26，首行基线 y=200 -->
+        <g id="book-b" class="scenery" pointer-events="none">
+          <rect class="shadow" x="694" y="140" width="490" height="9" rx="3"/>
+          <path class="l1 f-card" d="M700,134.4 C820,132.6 1040,135.2 1178,133.6 L1180,568.4
+            C1040,570.2 820,567.6 700,569.4 Z"/>
+          <path class="l2 miter" d="M920,134.4 C920.6,280 919.4,440 920,568.4"/>
+          <path class="l1 miter" d="M716,150 C860,148.4 1060,151 1170,149.4"/>
+        </g>
+        <g id="hs_book_b" class="hs on" data-hs="h_book_b">
+          <rect class="hit" x="924" y="192" width="256" height="278"/>
+          <g class="art">
+            <path class="l3 miter" d="M934,238 L1078,238 M934,264 L1042,264"/>
+          </g>
+        </g>
+
+        <!-- B 甲本（**上层纸**）：版框 x 40..540，中缝 x 290
+             左頁 40..290（正文全在左頁）、右頁 290..540（被散頁压住）
+             正文版心 x0=64、字距 18、字号 14；行高 22，首行基线 y=422 -->
+        <g id="book-a" class="scenery" pointer-events="none">
+          <rect class="shadow" x="34" y="248" width="512" height="10" rx="4"/>
+          <path class="l1 f-card" d="M40,242.4 C180,240.6 420,243.2 534,241.6 L536,628.4
+            C420,630.2 180,627.6 40,629.4 Z"/>
+          <path class="l2 miter" d="M290,242.4 C290.6,400 289.4,520 290,628.4"/>
+          <path class="l1 miter" d="M56,258 C180,256.4 420,259 526,257.4"/>
+        </g>
+        <g id="hs_book_a" class="hs on" data-hs="h_book_a">
+          <rect class="hit" x="50" y="404" width="570" height="192"/>
+          <g class="art">
+            <path class="l3 miter" d="M64,486 L544,486 M64,508 L382,508"/>
+          </g>
+        </g>
+
+        <!-- C 散頁（「纸层叠压」的那一层）：同时压住甲本的内封面與乙本的外頁，
+             也压住甲本正文的下兩行與乙本散葉的下兩行 —— 一本在上、一本在下，
+             中間那一張就是散頁。 -->
+        <g id="sheet" class="scenery" pointer-events="none">
+          <rect class="shadow" x="494" y="306" width="466" height="9" rx="3"/>
+          <path class="l1 f-card" d="M500,300.4 C620,298.6 850,301.2 954,299.6 L956,506.4
+            C850,508.2 620,505.6 500,507.4 Z"/>
+          <path class="l3 miter" d="M520,322 C640,320.4 850,323 940,321.4"/>
+          <path class="l3 miter" d="M520,342 C640,340.4 850,343 940,341.4"/>
+        </g>
+        <!-- 散葉四頁的熱點（手空时點它＝翻看；四頁各自獨立，不嵌套）-->
+        <g id="hs_leaf_b1" class="hs on" data-hs="h_leaf_b1">
+          <rect class="hit" x="706" y="176" width="208" height="69"/>
+          <g class="art"><path class="l3 miter" d="M720,206 L900,206 M720,238 L880,238"/></g>
+        </g>
+        <g id="hs_leaf_b2" class="hs on" data-hs="h_leaf_b2">
+          <rect class="hit" x="706" y="245" width="208" height="57"/>
+          <g class="art"><path class="l3 miter" d="M720,220 L900,220 M720,252 L880,252"/></g>
+        </g>
+        <g id="hs_leaf_a1" class="hs on" data-hs="h_leaf_a1">
+          <rect class="hit" x="304" y="178" width="228" height="68"/>
+          <g class="art"><path class="l3 miter" d="M320,208 L512,208 M320,240 L492,240"/></g>
+        </g>
+        <g id="hs_leaf_a2" class="hs on" data-hs="h_leaf_a2">
+          <rect class="hit" x="304" y="246" width="228" height="56"/>
+          <g class="art"><path class="l3 miter" d="M320,220 L512,220 M320,252 L492,252"/></g>
+        </g>
+
+        <!-- D 兩條頁邊引線（位置即是强调）：甲本那一條指到左頁邊的槽、乙本那一條指到右頁邊的槽 -->
+        <path id="lead-a" class="l3" d="M46,404 C36,440 34,470 34,500"/>
+        <path id="lead-b" class="l3" d="M960,310 C1080,340 1160,380 1192,424"/>
+
+        <!-- E 甲本左頁邊的引線槽（畫面上的標注作「甲本頁邊」）：槽裡現「因」 -->
+        <g id="hs_slot_a" class="hs on" data-hs="h_slot_a">
+          <rect class="hit" x="8" y="420" width="52" height="160"/>
+          <g class="art">
+            <path class="l2 miter" d="M12,428.4 L56,428.4 L56,572 L12,572 Z"/>
+          </g>
+          <text class="tx-k" id="btn-a" x="34" y="518" font-size="26" text-anchor="middle"></text>
+          <text class="tx-k" x="34" y="600" font-size="12" text-anchor="middle" fill="var(--ink2)">甲本頁邊</text>
+        </g>
+        <!-- F 乙本右頁邊的引線槽（畫面上的標注作「乙本頁邊」）：槽裡現「同」 -->
+        <g id="hs_slot_b" class="hs on" data-hs="h_slot_b">
+          <rect class="hit" x="1170" y="420" width="26" height="160"/>
+          <g class="art">
+            <path class="l2 miter" d="M1174,428.4 L1196,428.4 L1196,572 L1174,572 Z"/>
+          </g>
+          <text class="tx-k" id="btn-b" x="1185" y="518" font-size="26" text-anchor="middle"></text>
+          <text class="tx-k" x="1185" y="600" font-size="11" text-anchor="middle" fill="var(--ink2)">乙本頁邊</text>
+        </g>
+
+        <!-- G 兩存朱線：兩條引線既并置，中拉起一條（不判其孰是）-->
+        <g id="keepline" pointer-events="none">
+          <path class="l3" style="stroke:var(--zhu)" d="M34,584 C300,616 900,616 1185,584"/>
+          <circle cx="50" cy="588" r="3.4" fill="var(--zhu)" opacity=".5"/>
+          <circle cx="1169" cy="588" r="3.4" fill="var(--zhu)" opacity=".5"/>
+        </g>
+        <!-- H 底本牌落位後：乙本那一句上現一條朱線（標的是「轉抄的痕」，不是判语）-->
+        <g id="trace-b" pointer-events="none">
+          <path class="l3" style="stroke:var(--zhu)" d="M966,206 C1040,204.4 1110,207 1168,205.4"/>
+        </g>
+
+        <!-- I 底本槽（二选一）：一块底本牌，两个槽，一本一边 -->
+        <g id="hs_base_a" class="hs on" data-hs="h_base_a">
+          <rect class="hit" x="56" y="596" width="164" height="58"/>
+          <g class="art">
+            <path class="l2 miter" d="M64,604.4 L212,604.4 L212,646 L64,646 Z"/>
+          </g>
+          <text class="tx-k" id="base-a-ch" x="138" y="632" font-size="15" text-anchor="middle">甲本</text>
+        </g>
+        <g id="hs_base_b" class="hs on" data-hs="h_base_b">
+          <rect class="hit" x="248" y="596" width="164" height="58"/>
+          <g class="art">
+            <path class="l2 miter" d="M256,604.4 L404,604.4 L404,646 L256,646 Z"/>
+          </g>
+          <text class="tx-k" id="base-b-ch" x="330" y="632" font-size="15" text-anchor="middle">乙本</text>
+        </g>
+        <!-- J 勘異槽（兩存）-->
+        <g id="hs_keep" class="hs on" data-hs="h_keep">
+          <rect class="hit" x="620" y="588" width="210" height="62"/>
+          <g class="art">
+            <path class="l2 miter" d="M628,596.4 L822,596.4 L822,642 L628,642 Z"/>
+          </g>
+          <text class="tx-k" id="keep-ch" x="725" y="626" font-size="16" text-anchor="middle">勘異槽</text>
+        </g>
+
+        <!-- K 手边兩块牌（取 / 放；錯則彈回，可立即重放）-->
+        <g id="card-ghost" pointer-events="none">
+          <path class="l1 f-wood" d="M0,0.4 C24,-1.2 46,1.2 58,-0.4 L58,56.4 C46,58.2 24,55.6 0,57.4 Z"/>
+        </g>
+        <g id="hs_card_base" class="hs on" data-hs="h_card_base">
+          <rect class="hit" x="440" y="580" width="72" height="66"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M448,588.4 C470,586.8 494,589.2 506,587.6 L506,636.4
+              C494,638.2 470,635.6 448,637.4 Z"/>
+          </g>
+          <text class="tx-k" x="477" y="626" font-size="21" text-anchor="middle">本</text>
+        </g>
+        <g id="hs_card_keep" class="hs on" data-hs="h_card_keep">
+          <rect class="hit" x="520" y="580" width="72" height="66"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M528,588.4 C550,586.8 574,589.2 586,587.6 L586,636.4
+              C574,638.2 550,635.6 528,637.4 Z"/>
+          </g>
+          <text class="tx-k" x="557" y="626" font-size="21" text-anchor="middle">存</text>
+        </g>
+
+        <!-- L 回書庫（近景出口；也是真实 .hit）-->
+        <g id="hs_back" class="hs on" data-hs="h_back">
+          <rect class="hit" x="1000" y="600" width="182" height="58"/>
+          <g class="art"><path class="l1 miter" d="M1008,608 L1174,608 L1174,654 L1008,654 Z"/></g>
+          <text class="led-act" x="1091" y="644" text-anchor="middle" font-size="16">回 書 庫</text>
+        </g>
+
+        <!-- 接觸影 -->
+        <rect class="shadow" x="46" y="624" width="484" height="8" rx="3"/>
+        <rect class="shadow" x="746" y="564" width="444" height="8" rx="3"/>
+      </g>
+
+      <!-- 噪點層：微粒只由這一處發出（全文件別無第二處），擺在兩個視圖之後、
+           覆蓋層之前 —— 全景與近景都有顆粒，台账與紙仍舊清清楚楚 -->
+      <rect x="0" y="0" width="1200" height="720" fill="none" filter="url(#grain)"
+            opacity="0.045" style="mix-blend-mode:multiply" pointer-events="none"/>
+
+      <!-- ══════════════════ 值房台账（幕间切换的枢纽）══════════════════ -->
+      <g id="ledger" class="on">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-wood" d="M262,92.4 C480,90.6 720,93.2 938,91.6 L940,628.4
+            C720,630.2 480,627.6 262,629.4 Z"/>
+          <path class="l1 f-card" d="M286,116.4 C480,114.8 720,117.2 914,115.6 L916,604.4
+            C720,606.2 480,603.6 286,605.4 Z"/>
+          <path class="l2" d="M300,196 C480,194.4 720,197 900,195.4"/>
+          <path class="l2" d="M300,448 C480,446.4 720,449 900,447.4"/>
+        </g>
+        <text class="led-lede" x="600" y="160" text-anchor="middle">值房 · 今日差事</text>
+        <text class="led-sub" x="600" y="182" text-anchor="middle">典藏司 類書庫 · 夜直（第六幕）</text>
+
+        <g id="led-items">
+          <circle id="led-dot-1" class="l2" cx="356" cy="248" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-1" x="390" y="255">兩部類書同抄一條 —— 逐字對校，指其異文</text>
+          <circle id="led-dot-2" class="l2" cx="356" cy="322" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-2" x="390" y="329">一句拗口、一句順 —— 定其孰為底本</text>
+          <circle id="led-dot-3" class="l2" cx="356" cy="396" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-3" x="390" y="403">一字之異不可強合 —— 兩存之，不判其孰是</text>
+        </g>
+
+        <g class="hs on" data-hs="h_ledger_enter">
+          <rect class="hit" x="330" y="470" width="540" height="72"/>
+          <g class="art"><path class="l1 miter" d="M336,476 L864,476 L864,536 L336,536 Z"/></g>
+          <text class="led-act" x="600" y="518" text-anchor="middle">推 門 入 庫</text>
+        </g>
+        <g id="hs_led_bridge" class="hs on" data-hs="h_ledger_bridge">
+          <rect class="hit" x="330" y="548" width="320" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M336,554 L644,554 L644,602 L336,602 Z"/>
+            <text class="led-act" x="490" y="586" text-anchor="middle" font-size="15">幕間：上一幕交下來的話</text>
+          </g>
+        </g>
+        <g id="hs_led_notes" class="hs on gone" data-hs="h_ledger_notes">
+          <rect class="hit" x="664" y="548" width="206" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M670,554 L864,554 L864,602 L670,602 Z"/>
+            <text class="led-act" x="767" y="586" text-anchor="middle" font-size="15">取 閱 校 勘 記</text>
+          </g>
+        </g>
+        <text class="led-hint" id="led-hint" x="600" y="668" text-anchor="middle">庫裡沒有題目 —— 只有對勘案上摊开的兩部類書、兩張體例紙、手邊兩块牌。</text>
+      </g>
+
+      <!-- ══════════════════ 幕间过渡页（跨幕累积的载体）══════════════════ -->
+      <g id="bridge">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-card" d="M312,132.4 C520,130.6 720,133.2 896,131.6 L898,588.4
+            C720,590.2 520,587.6 312,589.4 Z"/>
+          <path class="l1 f-wood" d="M330,112.4 C520,110.6 720,113.2 878,111.6 L880,140.4
+            C720,142.2 520,139.6 330,141.4 Z"/>
+        </g>
+        <text class="br-lede" x="600" y="188" text-anchor="middle">幕 間 · 膳房 → 類書庫</text>
+        <text class="br-sub" x="600" y="212" text-anchor="middle">典藏司 夜直 第六班</text>
+        <g id="bridge-lines"></g>
+        <g class="hs on" data-hs="h_bridge_go">
+          <rect class="hit" x="470" y="530" width="260" height="62"/>
+          <g class="art"><path class="l1 miter" d="M476,536 L724,536 L724,586 L476,586 Z"/></g>
+          <text class="led-act" x="600" y="572" text-anchor="middle" font-size="19">收 起 · 進 類 書 庫</text>
+        </g>
+        <g class="hs on" data-hs="h_bridge_back">
+          <rect class="hit" x="132" y="530" width="200" height="62"/>
+          <g class="art"><path class="l1 miter" d="M138,536 L326,536 L326,586 L138,586 Z"/></g>
+          <text class="led-act" x="232" y="572" text-anchor="middle" font-size="17">回 台 賬</text>
+        </g>
+      </g>
+
+      <!-- ══════════════════ 纸：在场景内放大展开 ══════════════════ -->
+      <g id="paper-layer"></g>
+
+      <!-- 声 / 簿 -->
+      <g id="snd" style="cursor:pointer">
+        <rect x="1136" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1158" y="50" font-size="19" text-anchor="middle">聲</text>
+      </g>
+      <g id="bk" style="cursor:pointer">
+        <rect x="1084" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1106" y="50" font-size="19" text-anchor="middle">簿</text>
+      </g>
+    </g>
+  </svg>
+
+  <div id="hud">
+    <div id="slots"></div>
+    <div id="caption"></div>
+  </div>
+</div>
+
+<svg id="symdefs" width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="symroot"></defs></svg>
+
+<script>
+"use strict";
+(function(){
+
+/* ══ 0. 存档：与第一–五幕、第八幕同一把钥匙、同一结构（幕间协议 §1.3）════════
+   本幕（第六幕）写：act=6，往 done 追加 "act6"，《校勘记》追加本幕条目。
+   **只加不改**：不改键名、不改任何既有字段的语义、不写迁移脚本。
+   **本幕只往 inv 里放「本幕自己给得出的东西」**（兩块牌），
+   不假设「玩家还持有上一幕的物件」。 */
+var SAVE_KEY = "diandangsi.rustylake.v1";
+var NOTES_KEY = "diandangsi.rustylake.v1.notes";
+var ACT_NO = 6, ACT_ID = "act6";
+
+/* ══ 1. 上一幕交下来的东西（跨幕累积的读入侧）════════════════════════
+   读不到就是 null —— **照实说「沒讀到」，不假装办过**（协议 §1.3.3）。 */
+var PREV = (function(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return null;
+    return o;
+  }catch(e){ return null; }
+})();
+function prevHas(k){ return !!(PREV && PREV.f && PREV.f[k]); }
+function prevRead(k){ return !!(PREV && PREV.read && PREV.read.indexOf(k) >= 0); }
+function prevDone(id){ return !!(PREV && PREV.done && PREV.done.indexOf && PREV.done.indexOf(id) >= 0); }
+
+/* ══ 2. flags ═══════════════════════════════════════════════════════ */
+var FLAG_KEYS = [
+  "f_seen_act6","f_bridge_read","f_rule_read","f_rule2_read",
+  "f_book_a_read","f_book_b_read","f_leaf_a1_read","f_leaf_a2_read",
+  "f_leaf_b1_read","f_leaf_b2_read",
+  "f_card_base_taken","f_card_lead_taken","f_card_keep_taken",
+  "f_slot_a_set","f_slot_b_set","f_slots_kept",
+  "f_base_marked","f_two_kept","f_act6_done"
+];
+var F = {}, INV = [], READ = [], SEL = null, CAM = "room";
+/* 兩块牌各在何处：0 = 在手边；1/2 = 落在某一格；keep = 落在勘異槽 */
+var P = { base:0, lead:0, keep:false };
+/* 兩條引線是否已各自畫到本那一本的頁邊（畫上就一直留着，取牌時才收回）*/
+var LEAD = { a:false, b:false };
+
+function resetState(){
+  F = {}; FLAG_KEYS.forEach(function(k){ F[k]=false; });
+  F.f_misplaced_count = 0;      /* 与第一–五幕、第八幕同名同义：错的次数 */
+  INV = []; READ = []; SEL = null; CAM = "close";
+  P = { base:0, lead:0, keep:false };
+  LEAD = { a:false, b:false };
+}
+
+/* ══ 3. 存读档（幕间协议 §1.3：只加字段，不改字段语义，不改键名）══════ */
+var saveT = null;
+var DONE = (PREV && PREV.done && PREV.done.slice) ? PREV.done.slice() : [];
+var NOTE_LOG = (PREV && PREV.notes && PREV.notes.slice) ? PREV.notes.slice() : [];
+function markActDone(){
+  if(F.f_act6_done && DONE.indexOf(ACT_ID) < 0) DONE.push(ACT_ID);
+}
+function appendNotes(){
+  var es = noteEntries();
+  for(var i=0;i<es.length;i++){
+    var key = ACT_NO + "|" + es[i].h;
+    var has = false;
+    for(var j=0;j<NOTE_LOG.length;j++){ if(NOTE_LOG[j].key === key){ has = true; break; } }
+    if(!has) NOTE_LOG.push({ key:key, act:ACT_NO, h:es[i].h, l:es[i].l });
+  }
+}
+function saveNow(){
+  try{
+    markActDone(); appendNotes();
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      f:F, inv:INV, read:READ, cam:CAM, ts:Date.now(),
+      act:ACT_NO, done:DONE, notes:NOTE_LOG
+    }));
+  }catch(e){}
+}
+function saveDebounced(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
+function load(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return false;
+    FLAG_KEYS.forEach(function(k){ if(k in o.f) F[k]=o.f[k]; });
+    if(typeof o.f.f_misplaced_count === "number") F.f_misplaced_count = o.f.f_misplaced_count;
+    INV = o.inv || []; READ = o.read || []; CAM = o.cam || "close";
+    P = { base: (F.f_base_marked ? 1 : 0), lead: 0, keep: !!F.f_two_kept };
+    LEAD = { a: !!F.f_slot_a_set, b: !!F.f_slot_b_set };
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ══ 4. DOM ═════════════════════════════════════════════════════════ */
+var $ = function(s){ return document.querySelector(s); };
+var stage = $("#stage"), world = $("#world"), paperLayer = $("#paper-layer");
+var caption = $("#caption"), slotsEl = $("#slots");
+function el(tag, attrs){ var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  if(attrs) for(var k in attrs) n.setAttribute(k, attrs[k]); return n; }
+function txt(cls, x, y, s, extra){
+  var t = el("text", { "class":cls, x:x, y:y });
+  if(extra) for(var k in extra) t.setAttribute(k, extra[k]);
+  t.textContent = s; return t;
+}
+
+/* ══ 5. 视图（本幕 2 个：close 對勘案近景 / room 類書庫全景）═════════ */
+function setCam(which){
+  CAM = which;
+  world.dataset.cam = which;
+  document.querySelectorAll(".view").forEach(function(v){
+    v.classList.toggle("active", v.id === "view-" + which);
+  });
+  applyArmed();
+}
+function goRoom(){ setCam("room"); }
+function goClose(){ setCam("close"); }
+
+/* ══ 6. 「逐字对照」的排版器：兩本共用同一套坐标规则，所以字与字能直接对读 ═══
+   一字之差**只用位置**强调 —— 页边引线指向的是「同一個字位」，不是把字做大。
+   **注意：不许把关键字加大字号 / 加粗 / 变色**（协议 §3.4 第 2 条）。 */
+var TYPESET = {};   /* 每个書頁 key -> [{x,y,ch}] 的字位表 */
+function typeset(host, key, rows, spec){
+  var pos = [];
+  for(var i=0;i<rows.length;i++){
+    var row = rows[i] || "", linePos = [];
+    var y = spec.y0 + i*spec.lh;
+    for(var j=0;j<row.length;j++){
+      var x = spec.x0 + j*spec.cw;
+      host.appendChild(txt("tx-k", x, y, row[j], { "font-size":spec.fs }));
+      linePos.push({ x:x, y:y, ch:row[j] });
+    }
+    pos.push(linePos);
+  }
+  TYPESET[key] = pos;
+  return pos;
+}
+function charPos(key, ch){
+  var pos = TYPESET[key] || [];
+  for(var i=0;i<pos.length;i++) for(var j=0;j<pos[i].length;j++)
+    if(pos[i][j].ch === ch) return pos[i][j];
+  return null;
+}
+
+/* ── 甲本：《太平御覽》卷八百六十五（讖典古籍／中國哲學書電子化計劃四庫全書本，逐字照抄）
+      逐字原文：「廣志曰：鹽體因於水，故或水沮于土，故或與土雜，產于地，多側于海濱，
+                但未必千里相比耳。煮鹽與海同。海東有印成鹽，西方有石子鹽，皆生于水。
+                北胡中有青鹽，五原有紫鹽，波斯國有白鹽，如石子。」
+      （世界書局影印四庫全書本卷八百六十五 第 9a 页；2026-10-16 在線核實，逐字比對命中）── */
+var A_ROWS = [
+  "廣志曰：鹽體因於水，",
+  "故或水沮于土，故或",
+  "與土雜，產于地，多",
+  "側于海濱，但未必千"
+];
+var A_ROWS2 = [
+  "里相比耳。煮鹽與海",
+  "同。海東有印成鹽，",
+  "西方有石子鹽，皆生",
+  "于水。北胡有青鹽，"
+];
+var A_ROWS3 = [
+  "五原有紫鹽，波斯國",
+  "有白鹽如石子。",
+  "（四庫全書本卷八百六十五。",
+  "　出處與網址見《校勘記》二十三。）"
+];
+/* ── 乙本：《北堂書鈔》卷一百四十六 · 酒食部 · 鹽（讖典古籍本與四庫全書本同作「體同於水」）
+      逐字原文：「宿沙善煮，青州厥貢，體同於水，潤下作醎，成之自然，莫知所主。」
+      另：孔廣陶校註本作「體因於水〈博物志云鹽體因於水也〉」，並有校語
+          「陳本因誤同 —— 考明吳琯本、稗海本博物志皆脫此文，惟御覽八百六十五引廣志正作因字」。 ── */
+var B_ROWS = [
+  "宿沙善煮，青州厥",
+  "貢，體同於水，潤",
+  "下作醎，成之自然，",
+  "莫知所主。"
+];
+var B_ROWS2 = [
+  "同卷又列：國之重利，",
+  "煮海爲鹽，積薪焚之，",
+  "似石如傘，虎形印成。",
+  "（本條所引之書不止《廣志》一家。）"
+];
+function buildBooks(){
+  /* 兩部書的正文是**景**（畫出來的那一本書），不是熱點自己的「記號」：
+     `.art` 現在不接鼠標，正文若留在 .art 裏，玩家看得見的字大部分點不動。
+     故把生成的正文掛到同層的 #book-a / #book-b（它們本來就 pointer-events="none"），
+     字形、坐標、字號、與 #sheet 的前後關係都不變，只是換了個父節點。 */
+  var hostA = $("#book-a"), hostB = $("#book-b");
+  /* 甲本（上层纸）：四頁 —— 左頁 1 / 右頁 1 / 左頁 2 / 右頁 2；正文全排左頁
+     版心 x0=64、字距 18、字号 14；行高 22，首行基线 y=422 —— 正文落在 y 422..488，
+     正好在散頁上緣（y=384）之下、底本槽之上 */
+  var SPEC_AL = { x0:64,  cw:18, fs:14, y0:422, lh:22 };   /* 甲本左頁（正文）*/
+  var SPEC_AR = { x0:314, cw:18, fs:14, y0:422, lh:22 };   /* 甲本右頁（被散頁压住）*/
+  var SPEC_AL2= { x0:64,  cw:18, fs:14, y0:520, lh:22 };   /* 甲本左頁二（被散頁压住）*/
+  var SPEC_AR2= { x0:314, cw:18, fs:14, y0:520, lh:22 };   /* 甲本右頁二 */
+  typeset(hostA, "a_l1", A_ROWS,  SPEC_AL);
+  typeset(hostA, "a_l2", A_ROWS2, SPEC_AL2);
+  typeset(hostA, "a_r1", A_ROWS3, SPEC_AR);
+  typeset(hostA, "a_r2", [],       SPEC_AR2);
+  /* 乙本（下层纸）：四頁 —— 左頁 1 / 右頁 1 / 左頁 2 / 右頁 2；正文排右頁
+     版心 x0=986、字距 18、字号 14；行高 24，首行基线 y=226 —— 正文落在 y 226..250 */
+  var SPEC_BR = { x0:934, cw:18, fs:14, y0:330, lh:26 };
+  var SPEC_BR2= { x0:934, cw:18, fs:14, y0:380, lh:26 };
+  var SPEC_BL = { x0:716, cw:18, fs:14, y0:330, lh:26 };
+  var SPEC_BL2= { x0:716, cw:18, fs:14, y0:380, lh:26 };
+  typeset(hostB, "b_r1", B_ROWS,  SPEC_BR);
+  typeset(hostB, "b_r2", B_ROWS2, SPEC_BR2);
+  typeset(hostB, "b_l1", [],      SPEC_BL);
+  typeset(hostB, "b_l2", [],      SPEC_BL2);
+  /* 引线：从「同一個字位」各拉一条到本那一本的頁邊（位置就是强调）*/
+  var pYin  = charPos("a_l1", "因");    /* 甲本左頁第 1 行第 2 字 */
+  var pTong = charPos("b_r1", "同");    /* 乙本右頁第 1 行第 2 字 */
+  function leadPath(from, to){
+    var mx = (from.x + to.x)/2;
+    return "M" + Math.round(from.x) + "," + Math.round(from.y)
+      + " C" + Math.round(mx) + "," + Math.round(from.y + (to.y-from.y)*0.30)
+      + " " + Math.round(mx) + "," + Math.round(to.y - (to.y-from.y)*0.30)
+      + " " + Math.round(to.x) + "," + Math.round(to.y);
+  }
+  if(pYin)  document.getElementById("lead-a").setAttribute("d",
+      leadPath({ x:pYin.x+4,  y:pYin.y-14 },  { x:34,   y:424 }));
+  if(pTong) document.getElementById("lead-b").setAttribute("d",
+      leadPath({ x:pTong.x+8, y:pTong.y-14 }, { x:1192, y:424 }));
+  /* 页脚的書名（静的景）*/
+  hostA.appendChild(txt("tx-k", 290, 592, "甲本 · 太平御覽卷八百六十五", { "font-size":12, fill:"var(--ink2)", "text-anchor":"middle" }));
+  hostB.appendChild(txt("tx-k", 1040, 556, "乙本 · 北堂書鈔卷一百四十六", { "font-size":12, fill:"var(--ink2)", "text-anchor":"middle" }));
+}
+
+/* ══ 7. 物品栏 symbol（两块牌：底本牌 / 存牌 —— 引線槽不收牌，它自己收放一條引線）══ */
+var ITEMS = {
+  it_card_base: { n:"底本牌 · 本", sym:"sym_ben", box:[-4,-4,108,108] },
+  it_card_keep: { n:"存牌 · 存",   sym:"sym_cun", box:[-4,-4,108,108] }
+};
+function buildSymbols(){
+  var root = $("#symroot");
+  function plate(id, ch){
+    var s = el("symbol", { id:id, viewBox:"0 0 100 100" });
+    s.appendChild(el("path", { "class":"l1 f-wood",
+      d:"M22,16.4 C40,14.8 60,17.2 78,15.6 L78,80.4 C60,82.2 40,79.6 22,81.4 Z" }));
+    s.appendChild(txt("tx-k", 50, 62, ch, { "font-size":31, "text-anchor":"middle" }));
+    root.appendChild(s);
+  }
+  plate("sym_ben", "本");
+  plate("sym_cun", "存");
+}
+
+/* ══ 8. 物品栏 ═══════════════════════════════════════════════════════ */
+function give(id){ if(INV.indexOf(id) < 0) INV.push(id); renderInv(); applyArmed(); saveDebounced(); }
+function take(id){ var i = INV.indexOf(id); if(i >= 0){ INV.splice(i,1); if(SEL===id) SEL=null; renderInv(); applyArmed(); saveDebounced(); } }
+function renderInv(){
+  slotsEl.innerHTML = "";
+  for(var i=0;i<INV.length;i++){
+    var id = INV[i], it = ITEMS[id]; if(!it) continue;
+    var d = document.createElement("div");
+    d.className = "slot has" + (SEL===id ? " sel" : "");
+    d.setAttribute("data-slot", i);
+    var box = it.box;
+    d.innerHTML = '<svg viewBox="'+box[0]+' '+box[1]+' '+box[2]+' '+box[3]+'" preserveAspectRatio="xMidYMid meet">'
+      + '<use href="#'+it.sym+'"/></svg><span class="under"></span>';
+    (function(id2){
+      d.addEventListener("click", function(e){
+        e.stopPropagation();
+        if(SEL === id2){ SEL = null; }
+        else { SEL = id2;
+               if(id2 === "it_card_base") say("底本牌在手 —— 兩個槽：一本一邊，看哪一本那一句拗口而不順。", false, 3600);
+               else say("存牌在手 —— 兩條頁邊引線都畫上了，才輪到兩存。", false, 3600); }
+        renderInv(); applyArmed(); render(); saveDebounced();
+      });
+    })(id);
+    slotsEl.appendChild(d);
+  }
+}
+
+/* ══ 9. 可用热点加粗（持有某一牌时，立刻加粗**全部可落之处**）═══════════
+   加粗只说明「這裡可以放」，不泄露哪一格才合。 */
+var USE = {
+  it_card_base: { view:["close"], hs:["h_base_a","h_base_b"] },
+  it_card_keep: { view:["close"], hs:["h_keep"] }
+};
+function applyArmed(){
+  document.querySelectorAll(".hs.armed").forEach(function(n){ n.classList.remove("armed"); });
+  if(!SEL) return;
+  var u = USE[SEL]; if(!u) return;
+  if(u.view.indexOf(CAM) < 0) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")) n.classList.add("armed");
+  });
+}
+
+/* ══ 10. 音效（可选；WebAudio 合成，不引音频文件）═══════════════════ */
+var AC = null, SND = true;
+function sfx(kind){
+  if(!SND) return;
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    var f = kind==="paper"?250 : kind==="wood"?150 : kind==="board"?300 : 200;
+    o.type = (kind==="paper") ? "triangle" : "sine";
+    o.frequency.value = f;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(AC.destination);
+    g.gain.exponentialRampToValueAtTime(0.06, t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(kind==="paper"?0.30:0.24));
+    o.start(t); o.stop(t+(kind==="paper"?0.32:0.26));
+  }catch(e){}
+}
+$("#snd").addEventListener("click", function(e){
+  e.stopPropagation(); SND = !SND;
+  say(SND ? "聲 · 開" : "聲 · 閉", false, 1200);
+  try{ localStorage.setItem("diandangsi.rustylake.settings", JSON.stringify({snd:SND})); }catch(e2){}
+});
+
+/* ══ 11. 环境文字（不是题目框）：只指方位，不给内容，不出判语 ════════ */
+var capT = null;
+function say(t, zhu, ms){
+  caption.textContent = t;
+  caption.classList.toggle("zhu", !!zhu);
+  caption.classList.add("on");
+  clearTimeout(capT);
+  if(ms !== 0) capT = setTimeout(function(){ caption.classList.remove("on"); }, ms||2600);
+}
+
+/* ══ 12. 值房台账（幕间切换的枢纽；与前几幕同一套 .led-*）════════════ */
+var LEDGER = true;
+function showLedger(on){
+  LEDGER = !!on;
+  $("#ledger").classList.toggle("on", LEDGER);
+  if(LEDGER){ closeBridge(); closePaperQuiet(); }
+  if(LEDGER) renderLedger();
+  syncModal();
+}
+function ledgerDone(){
+  return [ !!F.f_slots_kept,
+           !!F.f_base_marked,
+           !!F.f_two_kept ];
+}
+function renderLedger(){
+  var done = ledgerDone();
+  for(var i=0;i<3;i++){
+    var dot = document.getElementById("led-dot-"+(i+1));
+    var tx  = document.getElementById("led-tx-"+(i+1));
+    if(!dot) continue;
+    if(done[i]){ dot.setAttribute("fill","var(--zhu)"); dot.setAttribute("r","6"); dot.setAttribute("stroke","none"); }
+    else { dot.setAttribute("fill","none"); dot.setAttribute("r","8"); dot.setAttribute("stroke","var(--ink2)"); }
+    if(tx) tx.classList.toggle("done", !!done[i]);
+  }
+  var n = document.getElementById("hs_led_notes");
+  if(n) n.classList.toggle("gone", !F.f_act6_done);
+  var hint = $("#led-hint");
+  if(hint){
+    if(F.f_act6_done) hint.textContent = "差事已畢。本庫所治已寫入校勘記 —— 點「取閱校勘記」。";
+    else hint.textContent = "庫裡沒有題目 —— 只有對勘案上摊开的兩部類書、兩張體例紙、手邊兩块牌。";
+  }
+}
+
+/* ══ 13. 幕间过渡页：把上一幕交下来的东西念一遍 ═════════════════════ */
+function openBridge(){
+  var host = $("#bridge-lines");
+  host.innerHTML = "";
+  var lines = [];
+  var names = { act1:"校書閣", act2:"熔銅作", act3:"校書堂", act4:"書庫走廊", act5:"膳房" };
+  var ids = ["act1","act2","act3","act4","act5"];
+  var got = [], i;
+  for(i=0;i<ids.length;i++){
+    if(prevDone(ids[i]) || prevHas("f_" + ids[i] + "_done")) got.push(ids[i]);
+  }
+  var n = got.length;
+  lines.push("上一班在值房交下來的話：");
+  lines.push("");
+  if(n === 5){
+    lines.push("· 校書閣、熔銅作、校書堂、書庫走廊、膳房 —— 五幕的校勘記都在冊上。");
+    lines.push("  上一班留下的一句話：「無徵不信，兩存不強合。」");
+    lines.push("  上一幕分的是三隻盆裡的大小；這一庫，對的是兩部類書上的一個字位。");
+  }else if(n > 0){
+    var nm = [];
+    for(i=0;i<n;i++) nm.push(names[got[i]]);
+    lines.push("· 上一班只交下來一半 —— 收了束的 " + n + " 幕：");
+    lines.push("　" + nm.join("、") + "。");
+    lines.push("  沒辦完的還在原處，不催；校勘記從記得下的地方接着記。");
+  }else if(PREV){
+    lines.push("· 值房裡有存檔，但五幕的差事都沒有收束。");
+    lines.push("  本班照實從類書庫這一頁開始記，不替上一班認帳。");
+  }else{
+    lines.push("· 值房裡沒有上一班的存檔 —— 這是第一班進類書庫。");
+    lines.push("  校勘記從本幕這一頁開始記。");
+  }
+  lines.push("");
+  lines.push("本班的差事（三件）：");
+  lines.push("一、兩部類書同抄一條 —— 逐字對校，指其異文。");
+  lines.push("二、一句拗口、一句順 —— 定其孰為底本。");
+  lines.push("三、一字之異不可強合 —— 兩存之，不判其孰是。");
+  var reads = [];
+  if(prevRead("p_ssxy")||prevRead("p_yulan")) reads.push("《世説新語》《太平御覽》");
+  if(prevRead("p_ly5a")||prevRead("p_ly5b")) reads.push("《洛陽伽藍記》");
+  if(prevRead("p_yanshi")||prevRead("p_zheng")) reads.push("《顏氏家訓》");
+  if(prevRead("p_q_a")||prevRead("p_q_b")||prevRead("p_q_c")) reads.push("券文三紙");
+  if(reads.length){
+    lines.push("");
+    lines.push("（上一班翻過的書還攤在原處：");
+    lines.push("　" + reads.join("") + "。）");
+  }
+  var y = 228;
+  for(i=0;i<lines.length;i++){
+    var t = el("text",{ "class":"br-body", x:372, y:y });
+    t.textContent = lines[i];
+    host.appendChild(t);
+    y += (lines[i] === "" ? 10 : 26);
+  }
+  $("#bridge").classList.add("on");
+  syncModal();
+  F.f_bridge_read = true; saveDebounced();
+}
+function closeBridge(){ $("#bridge").classList.remove("on"); syncModal(); }
+/* ══ 13b. 模態同步：台賬／過渡頁開着時，兩個場景層整棵子樹不接鼠標 ══════════
+   #ledger 起手就是 class="on"，`boot()` 若不同步，就等於「看不見的熱點全活着」
+   —— 修前走通第 00 步就是因為這個 MISS 的。 */
+function syncModal(){
+  var on = LEDGER || bridgeOpen();
+  world.classList.toggle("modal", on);
+  return on;
+}
+function bridgeOpen(){ return $("#bridge").classList.contains("on"); }
+
+/* ══ 14. 纸：在场景内展开（體例 / 校勘之例 / 兩部書 / 四頁散葉 / 校勘记）════
+   本幕的每一句引文都已在 2026-10-16 在本班沙箱内**逐字比对命中**并记下 HTTP 状态；
+   逐条 URL 与状态见《校勘记》二十三–二十七 与实现说明 §18.9。 */
+var PAPER_OPEN = null;
+function wrap(s, n){ var out = [], i; for(i=0;i<s.length;i+=n) out.push(s.slice(i,i+n)); return out; }
+var PAPERS = {
+  p_rule: { t:"架前 · 類書庫體例", s:"本幕自撰（非古籍引文）",
+    keys:["兩本並置","不判其孰是"],
+    body:[
+      "一、兩部類書同抄一條者，逐字對校；一字之異，兩存之，不強合。",
+      "二、一句拗口而文法自洽、一句通順而義有遷變者，以拗口者為底本。",
+      "三、既見其異，**兩本並置而不判其孰是** —— 本庫所治，只在字位。",
+      "（體例只講怎麼對，不講哪一本對。）"
+    ],
+    note:"（哪一本更古、哪一句更拗口，架上那兩部書裡有。這一頁不給。）" },
+  p_rule2: { t:"架前 · 校勘之例", s:"承第三幕「對照」一紙（本幕自撰）",
+    keys:["對照","並置則自見"],
+    body:[
+      "第三幕校書堂：兩張紙一對照，字之異就出來了。",
+      "本庫把這一手加倍：兩部類書**并列摊开**，中間还要压上一張散頁 ——",
+      "　同一個字位，一本作「因」、一本作「同」；字位相對，字形自別。",
+      "（一字之差的强调**只用位置**：引線指到本那一本的頁邊，不靠字號、不靠顏色。）"
+    ],
+    note:"（這一頁講的是看的方法，不是看的結果。）" },
+  p_book_a: { t:"案上 · 太平御覽 · 卷八百六十五 · 飲食部 · 鹽",
+    s:"[北宋]李昉 等 撰（四庫全書本，逐字，繁體）",
+    keys:["鹽體因於水","水沮于土","千里相比","海東有印成鹽","如石子"],
+    body:[
+      "廣志曰：鹽體因於水，故或水沮于土，故或與土雜，產于地，多側于海濱，",
+      "但未必千里相比耳。煮鹽與海同。海東有印成鹽，西方有石子鹽，皆生于水。",
+      "北胡中有青鹽，五原有紫鹽，波斯國有白鹽，如石子。",
+      "（本卷另有他條：蜀王本紀曰：宣帝地節中，始穿鹽井數十所。）",
+      "（世本曰：宿沙作煮鹽。晉太康地記曰：梓潼縣出傘子鹽。）",
+      "（出處與網址見《校勘記》二十三。逐字比對命中，HTTP 200。）"
+    ],
+    note:"（這一部的那一句拗口：『故或水沮于土，故或與土雜』—— 兩個「故或」頂着，讀不順。）" },
+  p_book_b: { t:"案上 · 北堂書鈔 · 卷一百四十六 · 酒食部 · 鹽",
+    s:"[唐]虞世南 撰（讖典古籍本；四庫全書本同作「體同於水」）",
+    keys:["體同於水","潤下作醎","莫知所主"],
+    body:[
+      "宿沙善煮，青州厥貢，體同於水，潤下作醎，成之自然，莫知所主。",
+      "朝取暮生，暮取朝復，挹之不損，取之不動。煮海爲鹽，積薪焚之。",
+      "同卷又列：國之重利，國用饒足，僉賴其膚。四域鹹醝，日飴鹽、苦鹽。",
+      "青鹽、赤鹽、紫鹽、黑鹽、大鹽、胡鹽、戎鹽。似石如傘，虎形印成。",
+      "　　（出處與網址見《校勘記》二十四；逐字比對命中，HTTP 200。）"
+    ],
+    note:"（這一部的那一句順：『體同於水，故多產于海濱』一句到底 —— 可「因」被寫成了「同」。）" },
+  p_leaf_a1: { t:"甲本 · 散葉一（左頁）", s:"本幕自撰的模擬錄文（非古籍引文）",
+    keys:["鹽體因於水","水沮于土"],
+    body:[
+      "廣志曰：鹽體因於水，故或水沮于土，故或與土雜，產于地，多側于海濱，",
+      "但未必千里相比耳。煮鹽與海同。海東有印成鹽。",
+      "按：此頁的「因」字上有**一條頁邊引線**（見左下角的引線槽）；",
+      "　　引線指的不是「這一字該怎麼讀」，只指「這一字在哪一頁上」。"
+    ],
+    note:"（這一句出《太平御覽》卷八百六十五；見案上那一部。）" },
+  p_leaf_a2: { t:"甲本 · 散葉二（右頁）", s:"本幕自撰的模擬錄文（非古籍引文）",
+    keys:["西方有石子鹽","北胡有青鹽"],
+    body:[
+      "西方有石子鹽，皆生于水。北胡有青鹽，五原有紫鹽，",
+      "波斯國有白鹽，如石子。",
+      "按：這一頁與散葉一同一手，只是同一卷的後半 —— 兩頁之間壓着那張散頁。"
+    ],
+    note:"（四庫全書本作「海東」「如石子」；讖典古籍本作「河東」「如細石子」—— 只作備核，不上畫面。）" },
+  p_leaf_b1: { t:"乙本 · 散葉一（左頁）", s:"本幕自撰的模擬錄文（非古籍引文）",
+    keys:["體同於水","故多產于海濱"],
+    body:[
+      "宿沙善煮，青州厥貢，體同於水，故多產于海濱。",
+      "按：此頁被甲本压住了一大半 —— 但被压住不等于没有字。",
+      "　　把甲本挪开（或用引線槽的兩條引線對位），字位是對得上的。"
+    ],
+    note:"（這一句出《北堂書鈔》卷一百四十六；見案上那一部。）" },
+  p_leaf_b2: { t:"乙本 · 散葉二（右頁）", s:"本幕自撰的模擬錄文（非古籍引文）",
+    keys:["體同於水","莫知所主"],
+    body:[
+      "「體同於水」四個字在這一頁的第 2 行第 3 字位 ——",
+      "與甲本「鹽體因於水」的「因」字**同一個字位**（兩本的行、字都按同一套規則排）。",
+      "按：兩個字位相對、字形相別，就是本幕要你看見的東西。",
+      "　　校語從此處出，結論兩存而不強合。"
+    ],
+    note:"（兩本的字位對照，是這一幕唯一要你「看見」的東西。）" }
+};
+function showPaper(pid){
+  var P2 = PAPERS[pid]; if(!P2) return;
+  PAPER_OPEN = pid;
+  if(READ.indexOf(pid) < 0){ READ.push(pid); saveDebounced(); }
+  var FKEY = { p_rule:"f_rule_read", p_rule2:"f_rule2_read",
+               p_book_a:"f_book_a_read", p_book_b:"f_book_b_read",
+               p_leaf_a1:"f_leaf_a1_read", p_leaf_a2:"f_leaf_a2_read",
+               p_leaf_b1:"f_leaf_b1_read", p_leaf_b2:"f_leaf_b2_read" }[pid];
+  if(FKEY) F[FKEY] = true;
+  paperLayer.innerHTML = "";
+  var W = 760, H = 576, X = 220, Y = 72;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C200,1 560,3.2 758,1.6 L758,"+(H-1.6)+" C560,"+(H-3.4)+" 200,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  g.appendChild(txt("paper-title", W/2, 50, P2.t, { "text-anchor":"middle" }));
+  g.appendChild(txt("paper-sub", W/2, 76, P2.s, { "text-anchor":"middle" }));
+  var y = 130;
+  for(var i=0;i<P2.body.length;i++){
+    var lines = wrap(P2.body[i], 33);
+    for(var j=0;j<lines.length;j++){
+      var tx = el("text",{ "class":"paper-body", x:48, y:y });
+      var seg = lines[j], marks = [], cur = 0;
+      P2.keys.forEach(function(k){ var idx=0,p; while((p=seg.indexOf(k,idx))>=0){ marks.push([p,p+k.length]); idx=p+1; } });
+      marks.sort(function(a,b){ return a[0]-b[0]; });
+      marks.forEach(function(m){
+        if(m[0] < cur) return;
+        if(m[0] > cur){ var n1 = el("tspan"); n1.textContent = seg.slice(cur,m[0]); tx.appendChild(n1); }
+        var sp = el("tspan"); sp.setAttribute("class","key"); sp.textContent = seg.slice(m[0],m[1]); tx.appendChild(sp);
+        cur = m[1];
+      });
+      if(cur < seg.length){ var n2 = el("tspan"); n2.textContent = seg.slice(cur); tx.appendChild(n2); }
+      g.appendChild(tx); y += 24;
+    }
+    y += 3;
+  }
+  if(P2.note){
+    var nl = wrap(P2.note, 52);
+    for(var n=0;n<nl.length;n++){
+      g.appendChild(txt("paper-sub", 48, H-46+(n*17), nl[n], { "font-size":12.5, fill:"var(--faint)" }));
+    }
+  }
+  g.appendChild(txt("paper-close", W/2, H-16, "點紙外任意處 · 收起", { "text-anchor":"middle" }));
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  render(); saveDebounced();
+}
+function closePaper(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+function closePaperQuiet(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+
+/* ══ 15. 校勘记（跨幕累积：上一幕条目原样承接，本幕条目补在其后）══════ */
+function noteEntries(){
+  var out = [];
+  if(prevDone("act1") || prevHas("f_act1_done")){
+    out.push({ h:"前 · 校書閣一幕所校（承上一班）",
+      l:["荼／茶兩存、《釋名》三件名物歸位、卷五兩套數並記 —— 三條已在本幕之前錄畢。"] });
+  }
+  if(prevDone("act2") || prevHas("f_act2_done")){
+    out.push({ h:"前 · 熔銅作一幕所校（承上一班）",
+      l:["辱金不入爐、鍊銅自分牡牝以形爲斷、《酉陽雜爼》卷十一之門類與撰人 —— 三條已錄畢。"] });
+  }
+  if(prevDone("act3") || prevHas("f_act3_done")){
+    out.push({ h:"前 · 校書堂一幕所校（承上一班）",
+      l:["觀／讀、遍／徧兩存；宋祁自記「䂍，一作犦」；雌黃滅誤以紙色爲斷 —— 五條已錄畢。",
+         "第三幕第一次出現「兩張紙對照」的手法；本幕是同一手法的加倍。"] });
+  }
+  if(prevDone("act4") || prevHas("f_act4_done")){
+    out.push({ h:"前 · 書庫走廊一幕所校（承上一班）",
+      l:["博士買驢，書券三紙，未有驢字；「紙／張」兩存；目從券出 —— 五條已錄畢。"] });
+  }
+  if(prevDone("act5") || prevHas("f_act5_done")){
+    out.push({ h:"前 · 膳房一幕所校（承上一班）",
+      l:["彭蜞／彭螖以大小別、勞／蟧一字之異兩存、灶門掩上 —— 六條已錄畢。",
+         "上一班留下的那句話：「無徵不信，兩存不強合。」本幕接着往下。"] });
+  }
+  if(F.f_book_a_read){
+    out.push({ h:"二十三 · 《太平御覽》卷八百六十五 · 飲食部 · 鹽（廣志一條）",
+      l:[
+        "廣志曰：鹽體因於水，故或水沮于土，故或與土雜，產于地，多側于海濱，",
+        "但未必千里相比耳。煮鹽與海同。海東有印成鹽，西方有石子鹽，皆生于水。",
+        "北胡中有青鹽，五原有紫鹽，波斯國有白鹽，如石子。",
+        "按：本條那一句拗口 —— 「故或水沮于土，故或與土雜」兩個「故或」頂着；",
+        "　　但其文法自洽：一個「因」字領到底，說的是鹽之成必因於水。",
+        "出處一：中國哲學書電子化計劃 · 欽定四庫全書 · 太平御覽卷八百六十五（第 9a 页）。",
+        "　　　hhl.cnkgraph.com/Book/子部/類書類/太平御覽/1573/KR3k0012_865",
+        "　　　（2026-10-16 在線核實，逐字比對命中，HTTP 200）",
+        "出處二：讖典古籍 · 太平御覽 · 卷八百六十五（同作「鹽體因於水 … 海東有印成鹽 … 如石子」）。",
+        "　　　shidianguji.com/zh/book/NGJ8924119990157841749/chapter/1lv9zddobx7p2（HTTP 200）",
+        "備核：四部叢刊本系統作「（河）東有印成鹽」「白鹽如細石子」—— 本班未在可直連的源上核到，"
+        + "故只作備核，不入謎題、不上畫面。"
+      ] });
+  }
+  if(F.f_book_b_read){
+    out.push({ h:"二十四 · 《北堂書鈔》卷一百四十六 · 酒食部 · 鹽（體同於水）",
+      l:[
+        "宿沙善煮，青州厥貢，體同於水，潤下作醎，成之自然，莫知所主。",
+        "按：本條那一句順 —— 「體同於水」四字一句到底，讀起來毫不費力；",
+        "　　「因」是承因、「同」是等同，義有差；順的那一句，把因果句改成了陳述句。",
+        "出處一：讖典古籍 · 北堂書鈔卷第一百四十六 · 酒食部五（鹽三十四）。",
+        "　　　shidianguji.com/zh/book/JDLS0002/chapter/1lkvlu3rcydde（2026-10-16 在線核實，HTTP 200）",
+        "出處二：讖典古籍 · 北堂書鈔（另一本）· 同卷 亦作「體同於水」。",
+        "　　　shidianguji.com/zh/book/NGJ89241199901655835989/chapter/1lwstf9xzrfve（HTTP 200）",
+        "備核一：維基文庫 · 北堂書鈔（四庫全書本）卷146 檢索摘要亦作「體同於水〈博物志云鹽體同於水〉」；",
+        "　　　　本班沙箱內 zh.wikisource.org 逾時不可達，只據檢索引文登記，未作逐字比對。",
+        "備核二：孔廣陶校註本（南海孔氏三十有三萬卷堂本）作「體因於水〈博物志云鹽體因於水也〉」，"
+        + "並有校語「今案陳本因誤同，考明吳琯本、稗海本博物志皆脫此文，惟御覽八百六十五引廣志正作因字」。",
+        "　　　　即：清代校勘家所見的別本（陳本）正是作「同」的那一個系統。以上只作備核。"
+      ] });
+  }
+  if(F.f_slot_a_set || F.f_slot_b_set){
+    out.push({ h:"二十五 · 一字之異：因／同（兩存，不強合）",
+      l:[
+        "甲本（太平御覽卷八百六十五引廣志）：鹽體**因**於水，故或水沮于土，故或與土雜 ……",
+        "乙本（北堂書鈔卷一百四十六）：體**同**於水，故多產于海濱。",
+        "按：兩個字位相對、字形相別 —— 「因」是承因，「同」是等同。",
+        "　　本庫不判其孰是：兩存之，不強合。",
+        "　　圖上只以**位置**示其異（每本一條頁邊引線，各指本那一本的頁邊），"
+        + "不靠字號、不靠顏色、不靠加粗。"
+      ] });
+  }
+  if(F.f_base_marked){
+    out.push({ h:"二十六 · 擇善而從：以甲本為底本",
+      l:[
+        "兩本同引《廣志》一條：甲本那一句拗口而文法自洽，乙本那一句通順而義有遷變。",
+        "按：類書互抄，越抄越順；越讀得通的版本，可能越晚、越走樣。",
+        "　故以甲本（太平御覽）為底本，乙本（北堂書鈔）那一句標為轉抄之變。",
+        "　　一隅不可偏信：本庫只標其為底本，不判乙本為誤本 —— 兩存之義仍立。",
+        "（本條只說「哪一句更古、更拗口」，不說「哪一本的哪一個字對」。）"
+      ] });
+  }
+  if(F.f_two_kept){
+    out.push({ h:"二十七 · 兩存不強合：並置而不判",
+      l:[
+        "兩條頁邊引線既已各指本那一本的頁邊，兩存之記隨之成立。",
+        "按：校勘之難不在找異，在**既見其異而不下斷語**。",
+        "　　本幕三事（指其異文 / 定其底本 / 兩存不合）都不問「哪一個字對」。",
+        "　　上一班留下的那句話，在這裡第三次用上：「無徵不信，兩存不強合。」"
+      ] });
+  }
+  if(F.f_act6_done){
+    out.push({ h:"附 · 類書庫所治：類書互抄，順者或晚",
+      l:[
+        "類書庫三事：逐字對校兩部類書；定甲本為底本；兩存其異而不強合。",
+        "所治者二：一曰類書互抄，順者或晚（版本），",
+        "　　　　　　二曰既見其異而不判其孰是（校勘之例）。",
+        "按：本幕在可直連的源上核不到的，一處也沒有立簽 —— 見本幕的引文溯源表。",
+        "　　四部叢刊本與《格致鏡原》兩條只入按語，不上畫面（協議 §4.2 的削法）。"
+      ] });
+  }
+  return out;
+}
+var notePage = 0;
+var NOTE_W = 760, NOTE_H = 576;
+function showNotes(){ notePage = 0; renderNotePage(); }
+function renderNotePage(){
+  var es = noteEntries();
+  if(!es.length){ say("校勘記還是空的。", false, 2400); return; }
+  if(notePage < 0) notePage = 0;
+  if(notePage > es.length-1) notePage = es.length-1;
+  var e = es[notePage];
+  PAPER_OPEN = "__notes";
+  if(READ.indexOf("__notes") < 0){ READ.push("__notes"); }
+  paperLayer.innerHTML = "";
+  var W = NOTE_W, H = NOTE_H, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C200,1 560,3.2 758,1.6 L758,"+(H-1.6)+" C560,"+(H-3.4)+" 200,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  g.appendChild(txt("paper-title", W/2, 50, "校 勘 記", { "text-anchor":"middle" }));
+  g.appendChild(txt("paper-sub", W/2, 76,
+    "典藏司 校書閣 · 熔銅作 · 校書堂 · 書庫走廊 · 膳房 · 類書庫 · 六幕所校", { "text-anchor":"middle" }));
+  g.appendChild(txt("tx-k", 44, 118, e.h, { "font-size":16 }));
+  var y = 146;
+  for(var i=0;i<e.l.length;i++){
+    wrap(e.l[i], 48).forEach(function(s){
+      g.appendChild(txt("tx-k", 56, y, s, { "font-size":12.5, fill:"var(--ink2)" })); y += 22;
+    });
+  }
+  var total = es.length, dw = 14;
+  for(i=0;i<total;i++){
+    g.appendChild(el("circle",{ cx:(W/2 - (total-1)*dw/2 + i*dw), cy:H-52, r:4,
+      fill:(i===notePage) ? "var(--zhu)" : "none",
+      stroke:(i===notePage) ? "none" : "var(--faint)", "stroke-width":1 }));
+  }
+  if(notePage > 0){
+    g.appendChild(txt("paper-close", 44, H-44, "◂ 前一條", { "font-size":15 }));
+    var hp = el("rect",{ x:34, y:H-62, width:100, height:32, fill:"transparent" });
+    hp.setAttribute("style","cursor:pointer");
+    hp.addEventListener("click", function(ev){ ev.stopPropagation(); notePage--; renderNotePage(); });
+    g.appendChild(hp);
+  }
+  if(notePage < total-1){
+    g.appendChild(txt("paper-close", W-44, H-44, "後一條 ▸", { "font-size":15, "text-anchor":"end" }));
+    var hn = el("rect",{ x:W-134, y:H-62, width:100, height:32, fill:"transparent" });
+    hn.setAttribute("style","cursor:pointer");
+    hn.addEventListener("click", function(ev){ ev.stopPropagation(); notePage++; renderNotePage(); });
+    g.appendChild(hn);
+  }
+  g.appendChild(txt("paper-close", W/2, H-16, "點紙外任意處 · 收起", { "text-anchor":"middle" }));
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  /* 「读校勘记」不经过任何 flag 变化 —— 必须在那一刻直接写一次存档（协议 §1.3.2 第 5 条）*/
+  appendNotes(); saveNow();
+  try{ localStorage.setItem(NOTES_KEY, JSON.stringify({ made:Date.now(), act:ACT_NO, entries:es.length })); }catch(e2){}
+}
+
+/* ══ 16. 渲染（唯一的真相来源：flags 与 P / LEAD）═════════════════════ */
+function render(){
+  /* ① 兩條鏈的成立，**由点击链自然带来**（不是脚本直接改 flag）*/
+  if(F.f_slot_a_set && F.f_slot_b_set) F.f_slots_kept = true;
+  /* ② 引線槽：空槽＝畫一條引線；已畫之槽＝把那一條收回（同一格两用，可反复）*/
+  document.getElementById("btn-a").textContent = LEAD.a ? "因" : "";
+  document.getElementById("btn-b").textContent = LEAD.b ? "同" : "";
+  document.getElementById("btn-a").classList.toggle("on", LEAD.a);
+  document.getElementById("btn-b").classList.toggle("on", LEAD.b);
+  document.getElementById("lead-a").classList.toggle("on", LEAD.a);
+  document.getElementById("lead-b").classList.toggle("on", LEAD.b);
+  /* ③ 兩块牌：在手边 / 已落格（引線槽不收牌，它自己收放一條引線）*/
+  document.getElementById("hs_card_base").classList.toggle("gone", P.base !== 0);
+  document.getElementById("hs_card_keep").classList.toggle("gone", P.keep);
+  document.getElementById("base-a-ch").textContent = (P.base === 1) ? "底本已立" : "甲本";
+  document.getElementById("base-b-ch").textContent = (P.base === 2) ? "底本已立" : "乙本";
+  document.getElementById("keep-ch").textContent = P.keep ? "兩存已立" : "勘異槽";
+  /* ④ 世界变化：兩存朱線 / 乙本那一句上的朱線 */
+  document.getElementById("keepline").classList.toggle("on", !!F.f_two_kept);
+  document.getElementById("trace-b").classList.toggle("on", !!F.f_base_marked);
+  /* ⑤ 錯法累到三次：案上留一块 12% 朱砂 */
+  var pr = document.getElementById("print");
+  if(pr) pr.classList.toggle("show", (F.f_misplaced_count|0) >= 3);
+  var nb = document.getElementById("hs_led_notes");
+  if(nb) nb.classList.toggle("gone", !F.f_act6_done);
+  renderLedger();
+  renderInv(); applyArmed();
+}
+
+/* ══ 17. 失败回路：可复原、不锁死（与第一–五幕、第八幕同一语法）═══════
+   规则：任何一个放得不合的动作 = 现场变化（抖两下 / 牌沿槽边弹回 / 牌順頁邊滑落）
+   + 一句方位话。计数器只管「累了几次」。**绝不出判语。** */
+function shake(hsId){
+  var g = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(g){ g.classList.remove("shaking"); void g.offsetWidth; g.classList.add("shaking");
+    setTimeout(function(){ g.classList.remove("shaking"); }, 300); }
+}
+function bump(hsId){
+  shake(hsId);
+  F.f_misplaced_count = (F.f_misplaced_count|0) + 1;
+  render(); saveDebounced();
+}
+function ghostFall(){
+  var gh = document.getElementById("card-ghost"); if(!gh) return;
+  gh.setAttribute("class","at-edge");
+  gh.classList.remove("fall"); void gh.offsetWidth; gh.classList.add("fall");
+  setTimeout(function(){ gh.classList.remove("fall"); }, 600);
+}
+function hold(id){ if(INV.indexOf(id) < 0) INV.push(id); SEL = id; renderInv(); applyArmed(); render(); saveDebounced(); }
+function drop(id){ var i = INV.indexOf(id); if(i >= 0) INV.splice(i,1); if(SEL === id) SEL = null; renderInv(); applyArmed(); }
+
+/* ══ 18. 热点行为 ═══════════════════════════════════════════════════ */
+var tapCount = {}, flagsAtTap = {};
+function onHotspot(id){
+  if(PAPER_OPEN){ closePaper(); return; }
+  var before = JSON.stringify(F) + SEL + INV.length + P.base + P.lead + P.keep;
+  tapCount[id] = (tapCount[id]||0)+1;
+  if(tapCount[id] >= 5 && flagsAtTap[id] === before){ hint(); tapCount[id] = 0; }
+  if(tapCount[id] === 1) flagsAtTap[id] = before;
+  var fn = H[id];
+  if(fn) fn();
+}
+function takeCard(which){
+  var id = "it_card_" + which, fk = "f_card_" + which + "_taken";
+  if(INV.indexOf(id) >= 0){ SEL = id; renderInv(); applyArmed(); return; }
+  hold(id); F[fk] = true; sfx("wood");
+  if(which === "base") say("取了底本牌 —— 兩個槽：一本一邊，看哪一本那一句拗口而不順。", false, 3800);
+  else say("取了存牌 —— 兩條頁邊引線都畫上了，才輪到兩存。", false, 3800);
+  render(); saveNow();
+}
+function slotLead(which){
+  var isA = (which === "a"), fk = isA ? "f_slot_a_set" : "f_slot_b_set";
+  if(LEAD[which]){
+    /* 同一格两用：已畫引線之槽，再點＝把這一條引線收回（另一條不動，其它 flag 也不丢）*/
+    LEAD[which] = false; F[fk] = false;
+    say("把" + (isA ? "甲本" : "乙本") + "頁邊那一條引線收了回來 —— 另一條仍在，可再畫。", false, 3600);
+    render(); saveNow(); return;
+  }
+  if(!isA && !LEAD.a){
+    /* 錯法：兩條引線本該各在本那一本的頁邊 —— 這一條還沒畫，就先往那一邊畫 */
+    ghostFall(); bump("h_slot_b");
+    say("这一处放不上去 —— 牌順着錄文頁邊滑了下來。甲本那一條先畫上，再論乙本。", false, 4600);
+    return;
+  }
+  LEAD[which] = true; F[fk] = true; sfx("paper");
+  render(); saveNow();
+  say("一條引線從「" + (isA ? "因" : "同") + "」字拉到" + (isA ? "甲本" : "乙本")
+    + "的頁邊 —— 指的不是讀音，是這一個字位。", false, 4400);
+  if(LEAD.a && LEAD.b) say("兩條引線各指一本的頁邊 —— 同一個字位，兩個字形。", false, 4400);
+}
+function slotBase(which){
+  var isA = (which === "a");
+  if(P.base === (isA ? 1 : 2)){
+    P.base = 0; F.f_base_marked = false;
+    drop("it_card_base"); hold("it_card_base");
+    say("把底本牌從" + (isA ? "甲本" : "乙本") + "那一槽取了回來 —— 兩個槽又都空着。", false, 3600);
+    render(); saveNow(); return;
+  }
+  if(P.base !== 0){
+    bump(isA ? "h_base_a" : "h_base_b");
+    say("底本牌不在手邊 —— 先把它從另一邊那一槽取回。", false, 3600);
+    return;
+  }
+  if(SEL !== "it_card_base" && INV.indexOf("it_card_base") < 0){
+    bump(isA ? "h_base_a" : "h_base_b");
+    say("這一槽還空着 —— 手邊那兩块牌裡，先取「本」那一块。", false, 4000);
+    return;
+  }
+  if(!isA){
+    /* 錯法：底本牌往乙本那一槽放 —— 現場變化（牌順乙本紙邊彈回）＋ 一句方位话 */
+    bump("h_base_b"); shake("h_book_b");
+    say("底本牌順着乙本紙邊彈了回來 —— 看哪一本那一句拗口而不順。", false, 4400);
+    return;
+  }
+  P.base = 1; F.f_base_marked = true; drop("it_card_base"); sfx("board");
+  render(); saveNow();
+  say("底本牌落在甲本一邊 —— 類書互抄，越抄越順；拗口的那一句留着原樣。", false, 4600);
+}
+function slotKeep(){
+  if(P.keep){
+    P.keep = false; F.f_two_kept = false;
+    drop("it_card_keep"); hold("it_card_keep");
+    say("把存牌從勘異槽取了回來 —— 兩存的朱線跟着收回，可重新並置。", false, 3600);
+    render(); saveNow(); return;
+  }
+  if(!(LEAD.a && LEAD.b)){
+    bump("h_keep");
+    say("勘異槽還空着 —— 兩本頁邊的引線先各畫一條，再論兩存。", false, 4400);
+    return;
+  }
+  if(SEL !== "it_card_keep" && INV.indexOf("it_card_keep") < 0){
+    bump("h_keep");
+    say("勘異槽還空着 —— 手邊那兩块牌裡，先取「存」那一块。", false, 4000);
+    return;
+  }  P.keep = true; F.f_two_kept = true; drop("it_card_keep"); sfx("paper");
+  render(); saveNow();
+  if(!F.f_act6_done){
+    F.f_act6_done = true;
+    saveNow();
+    say("兩存成立 —— 因／同並置，不強合。兩條引線、一块底本牌、一块存牌，這一庫歸檔。", false, 5200);
+  }else{
+    say("兩存成立 —— 因／同並置，不強合。", false, 4600);
+  }
+}
+function readLeaf(pid){ showPaper(pid); }
+
+var H = {
+  /* —— 台账 / 幕间 —— */
+  h_ledger_enter: function(){ showLedger(false); F.f_seen_act6 = true; setCam("close"); render(); sfx("paper"); },
+  h_ledger_bridge: function(){ openBridge(); },
+  h_bridge_go: function(){ closeBridge(); showLedger(false); setCam("close"); render(); },
+  h_bridge_back: function(){ closeBridge(); showLedger(true); },
+  h_ledger_notes: function(){ showNotes(); },
+
+  /* —— 類書庫全景 —— */
+  h_rule: function(){ showPaper("p_rule"); },
+  h_rule2: function(){ showPaper("p_rule2"); },
+  h_go: function(){
+    goClose(); sfx("wood"); render(); saveDebounced();
+    say("走近對勘案 —— 兩部類書并列摊开，中間壓着一張散頁。", false, 4600);
+  },
+
+  /* —— 對勘案近景 —— */
+  h_back: function(){ goRoom(); say("退回書庫。", false, 1600); render(); },
+  h_book_a: function(){ showPaper("p_book_a"); },
+  h_book_b: function(){ showPaper("p_book_b"); },
+  h_card_base: function(){ takeCard("base"); },
+  h_card_keep: function(){ takeCard("keep"); },
+  h_slot_a: function(){ slotLead("a"); },
+  h_slot_b: function(){ slotLead("b"); },
+  h_base_a: function(){ slotBase("a"); },
+  h_base_b: function(){ slotBase("b"); },
+  h_keep:   function(){ slotKeep(); }
+};
+
+/* 散葉（四頁）：點它就是翻看这一页 —— 落牌一律走引線槽那兩個熱點（一處一槽，不混用）*/
+["a1","a2","b1","b2"].forEach(function(k){
+  var g = document.getElementById("hs_leaf_" + k);
+  if(!g) return;
+  g.addEventListener("click", function(e){
+    e.stopPropagation();
+    if(PAPER_OPEN){ closePaper(); return; }
+    readLeaf("p_leaf_" + k);
+  });
+});
+
+/* ══ 19. 老掌书：只指方位，不给内容；没有提示按钮 ═══════════════════ */
+var HINTS = {
+  books:"架上兩部 —— 一部《太平御覽》，一部《北堂書鈔》；案上摊的是它們的鹽部。",
+  slots:"兩本的頁邊各有一個空槽 —— 手邊的「異」那一块牌，兩處都用得上。",
+  chars:"把兩本那一個字位對上看 —— 甲本是「因」，乙本作「同」。",
+  base:"底本槽有兩個：一本一邊。哪一本那一句拗口，就是哪一邊。",
+  keep:"勘異槽在案的下首 —— 兩條引線都畫上了，它才收牌。",
+  leaves:"散葉四頁：手空时點它是翻看，手上有「異」牌时點它是落牌。"
+};
+var hintUsed = {}, lastHint = 0;
+function hint(){
+  var now = Date.now();
+  if(now - lastHint < 180000) return;
+  var order;
+  if(!F.f_book_a_read || !F.f_book_b_read) order = ["books","chars","slots"];
+  else if(!F.f_slots_kept) order = ["slots","chars","leaves"];
+  else if(!F.f_base_marked) order = ["base","books"];
+  else if(!F.f_two_kept) order = ["keep","slots"];
+  else order = ["books","base"];
+  for(var i=0;i<order.length;i++){
+    var k = order[i];
+    if(hintUsed[k]) continue;
+    hintUsed[k] = 1; lastHint = now;
+    say(HINTS[k], false, 4200);
+    return;
+  }
+}
+var idleT = null;
+function pokeIdle(){ clearTimeout(idleT); idleT = setTimeout(hint, 90000); }
+document.addEventListener("mousemove", pokeIdle, {passive:true});
+document.addEventListener("keydown", pokeIdle);
+
+/* ══ 20. 事件绑定 ═══════════════════════════════════════════════════ */
+function inActiveView(node){
+  var v = node.closest ? node.closest(".view") : null;
+  return !v || v.classList.contains("active");
+}
+stage.addEventListener("click", function(e){
+  var hs = e.target.closest ? e.target.closest(".hs") : null;
+  if(hs && hs.dataset.hs && !hs.classList.contains("gone")){
+    if(inActiveView(hs)) onHotspot(hs.dataset.hs);
+    return;
+  }
+  if(bridgeOpen()){ return; }
+  /* 判序（修正）：熱點 → 過渡頁 → **紙** → 台賬。
+     紙（#paper-layer）畫在 #ledger 之後、壓在它上面；舊判序先看 LEDGER，
+     於是「簿子開着時校勘記那一頁點不掉」，只能按 Esc。 */
+  if(PAPER_OPEN){ closePaper(); return; }
+  if(LEDGER) return;
+  if(CAM !== "close") goClose();
+});
+$("#bk").addEventListener("click", function(e){ e.stopPropagation(); showLedger(true); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){
+    if(bridgeOpen()){ closeBridge(); return; }
+    if(LEDGER){ showLedger(false); return; }
+    if(PAPER_OPEN) closePaper(); else if(CAM !== "close") goClose();
+  }
+  var k = (e.key||"").toLowerCase();
+  if(k === "b") showLedger(!LEDGER);
+  if(k === "1") setCam("close");
+  if(k === "2") setCam("room");
+});
+
+/* ══ 21. 启动 ═══════════════════════════════════════════════════════ */
+function boot(){
+  buildSymbols();
+  buildBooks();
+  var restored = false;
+  var AUTO = (location.hash.match(/auto=([a-z0-9]+)/i)||[])[1];
+  var FRESH = /fresh/.test(location.hash);
+  if(AUTO || FRESH){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} resetState(); }
+  else restored = load();
+  if(!restored) resetState();
+  F.f_seen_act6 = true;
+  render();
+  setCam(CAM || "close");
+  syncModal();
+  if(AUTO){ showLedger(true); }
+  /* 截图探针（仅 ?probe= 时生效）：只摆 flags 与相机，不跳过任何交互分支 */
+  var PROBE = (location.search.match(/[?&]probe=([a-z0-9]+)/i)||[])[1];
+  if(/[?&]still=1/.test(location.search)){
+    var st = document.createElement("style");
+    st.textContent = "*{transition-duration:0s!important;animation-delay:0s!important}";
+    document.head.appendChild(st);
+  }
+  function showRoom(){ showLedger(false); F.f_seen_act6 = true; setCam("room"); render(); }
+  function showClose(){ showLedger(false); setCam("close"); render(); }
+  function readAll(){
+    F.f_rule_read = true; F.f_rule2_read = true;
+    F.f_book_a_read = true; F.f_book_b_read = true;
+    F.f_leaf_a1_read = true; F.f_leaf_a2_read = true;
+    F.f_leaf_b1_read = true; F.f_leaf_b2_read = true;
+  }
+  function chainLeads(){
+    readAll();
+    F.f_card_lead_taken = true;
+    LEAD = { a:true, b:true }; P.lead = 1;
+    F.f_slot_a_set = true; F.f_slot_b_set = true; F.f_slots_kept = true;
+  }
+  function chainBase(){
+    readAll();
+    F.f_card_base_taken = true; P.base = 1; F.f_base_marked = true;
+  }
+  function chainKeep(){
+    chainLeads(); chainBase();
+    F.f_card_keep_taken = true; P.keep = true; F.f_two_kept = true;
+  }
+  if(PROBE){
+    if(PROBE === "ledger"){ showLedger(true); setCam("close"); render(); }
+    else if(PROBE === "room"){ showRoom(); }
+    else if(PROBE === "close"){ showClose(); }
+    else if(PROBE === "rule"){ showRoom(); showPaper("p_rule"); }
+    else if(PROBE === "rule2"){ showRoom(); showPaper("p_rule2"); }
+    else if(PROBE === "booka"){ showClose(); showPaper("p_book_a"); }
+    else if(PROBE === "bookb"){ showClose(); showPaper("p_book_b"); }
+    else if(PROBE === "bridge"){ showRoom(); openBridge(); }
+    else if(PROBE === "bridgefull"){ load(); buildBooks(); render(); setCam("close"); showLedger(false); openBridge(); }
+    else if(PROBE === "leads"){ chainLeads(); showClose(); }
+    else if(PROBE === "base"){ chainLeads(); chainBase(); showClose(); }
+    else if(PROBE === "kept"){ chainKeep(); showClose(); }
+    else if(PROBE === "done"){
+      chainKeep(); F.f_act6_done = true; showClose();
+    }
+    else if(PROBE === "notes"){
+      chainKeep(); F.f_act6_done = true; showClose(); showNotes();
+    }
+    else if(PROBE === "leaf"){ showClose(); showPaper("p_leaf_b2"); }
+  }
+  requestAnimationFrame(function(){ $("#boot").classList.add("gone"); });
+  pokeIdle();
+  if(AUTO) runAuto(AUTO);
+  else if(restored) say("接着上次的地方。", false, 2400);
+}
+
+/* ══ 22. 自动走通：清档重来 + 只用真实 MouseEvent('click') 打真实 .hit ══
+   脚本**不直接改任何 flag**：兩條引線靠「取牌 → 落槽」自然成立，
+   底本牌靠「取牌 → 落甲槽」自然成立，兩存靠「取牌 → 落勘異槽」自然成立 ——
+   runAuto 里没有一处 F.xxx = true。
+   **注意**：选择器一律写成 .hs[data-hs="..."]（带引号），否则 h_slot_a 会前缀命中别的。 */
+function click(hsId){
+  var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(!n) return false;
+  if(n.classList.contains("gone")) return false;
+  var hit = n.querySelector(".hit") || n;
+  if(!inActiveView(n)) return false;
+  hit.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function clickEl(sel){
+  var n = document.querySelector(sel);
+  if(!n) return false;
+  n.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function w(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function slotOf(itemId){
+  var i = INV.indexOf(itemId); if(i < 0) return null;
+  return document.querySelector('.slot[data-slot="'+i+'"]');
+}
+function pickSlot(itemId){
+  if(SEL === itemId) return true;
+  var s = slotOf(itemId); if(!s) return false;
+  s.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return SEL === itemId;
+}
+async function runAuto(stop){
+  var log = [];
+  function step(name, ok){ log.push(name + "=" + (ok ? "ok" : "MISS")); }
+  function report(){
+    document.title = "SELFTEST::" + log.join(" | ")
+      + " || FLAGS[" + FLAG_KEYS.filter(function(k){ return F[k]; }).join(",") + "]"
+      + " || misplaced=" + F.f_misplaced_count
+      + " || INV[" + INV.join(",") + "] || CAM=" + CAM
+      + " || LEAD[" + (LEAD.a?1:0) + (LEAD.b?1:0) + "]"
+      + " || P[" + P.base + P.lead + (P.keep?1:0) + "]"
+      + " || READ[" + READ.join(",") + "]"
+      + " || DONE[" + DONE.join(",") + "]";
+    document.body.setAttribute("data-selftest", log.join(" | "));
+  }
+  try{
+    if(stop === "ledger"){ step("停在值房台賬", LEDGER); report(); return; }
+    step("0_讀幕間", click("h_ledger_bridge")); await w(340);
+    step("1_收起幕間", click("h_bridge_go")); await w(340);
+    if(stop === "bridge"){ step("停在幕間", true); report(); return; }
+    step("2_推門入庫", click("h_ledger_enter")); await w(380);
+    step("3_在對勘案近景", CAM === "close");
+    /* ── 翻書可查：兩張體例紙（在全景的架前，所以要先退回全景）─────── */
+    step("4_退回書庫", (function(){ click("h_back"); return CAM === "room"; })()); await w(520);
+    step("5_讀類書庫體例", click("h_rule")); await w(300); closePaper(); await w(160);
+    step("6_讀校勘之例", click("h_rule2")); await w(300); closePaper(); await w(160);
+    step("7_兩紙已讀", !!(F.f_rule_read && F.f_rule2_read));
+    step("8_再走近對勘案", (function(){ click("h_go"); return CAM === "close"; })()); await w(620);
+    /* ── 翻書可查：兩部類書 ──────────────────────────────── */
+    step("9_讀太平御覽", click("h_book_a")); await w(320); closePaper(); await w(160);
+    step("10_讀北堂書鈔", click("h_book_b")); await w(320); closePaper(); await w(160);
+    step("11_兩部已讀", !!(F.f_book_a_read && F.f_book_b_read));
+    /* ── 錯法一：兩條引線本該各在本那一本的頁邊 —— 先往乙本那一邊畫，槽不受 ── */
+    step("12_錯法一_越槽落引線", (function(){ var mc = F.f_misplaced_count|0; click("h_slot_b");
+        return (F.f_misplaced_count|0) === mc+1 && !LEAD.b; })()); await w(520);
+    step("13_錯法一已記_乙槽仍空", !LEAD.b);
+    /* ── 鏈①：兩條頁邊引線（位置即是强调）────────────────────── */
+    step("14_引線落甲本頁邊", (function(){ click("h_slot_a"); return LEAD.a && F.f_slot_a_set; })()); await w(440);
+    step("15_引線落乙本頁邊", (function(){ click("h_slot_b"); return LEAD.b && F.f_slot_b_set; })()); await w(440);
+    step("16_兩條引線皆在", LEAD.a && LEAD.b);
+    step("17_兩存未成立_存牌未上", !F.f_two_kept);
+    /* ── 錯法二：引線可在同一格两用（收回甲本那一條，再畫回去）──────── */
+    step("18_取回甲線", (function(){ click("h_slot_a"); return !LEAD.a && LEAD.b; })()); await w(420);
+    step("19_甲線再畫回", (function(){ click("h_slot_a"); return LEAD.a && LEAD.b; })()); await w(440);
+    /* ── 錯法三：手上沒有存牌就往勘異槽上（槽不受，抖两下）────────── */
+    step("20_錯法三_空手上勘異槽", (function(){ var mc = F.f_misplaced_count|0; click("h_keep");
+        return (F.f_misplaced_count|0) === mc+1 && !F.f_two_kept; })()); await w(400);
+    step("21_錯法三已記_兩存未立", !F.f_two_kept);
+    /* ── 錯法四：底本牌往乙本那一槽放（牌順乙本紙邊彈回）──────────── */
+    step("22_取底本牌", (function(){ click("h_card_base"); return pickSlot("it_card_base"); })()); await w(340);
+    step("23_錯法四_底本牌往乙槽", (function(){ var mc = F.f_misplaced_count|0; click("h_base_b");
+        return (F.f_misplaced_count|0) === mc+1 && !F.f_base_marked; })()); await w(520);
+    step("24_錯法四已記_乙槽未立", !F.f_base_marked);
+    step("25_底本牌落甲槽", (function(){ click("h_base_a"); return !!F.f_base_marked; })()); await w(440);
+    step("26_底本已立", !!F.f_base_marked);
+    /* ── 鏈②：兩存（收束）─────────────────────────────────── */
+    step("27_取存牌", (function(){ click("h_card_keep"); return pickSlot("it_card_keep"); })()); await w(340);
+    step("28_存牌落勘異槽", (function(){ click("h_keep"); return !!F.f_two_kept; })()); await w(520);
+    step("29_兩存成立", !!F.f_two_kept);
+    step("30_收束成立", !!F.f_act6_done);
+    /* ── 開台账 → 校勘记 ───────────────────────────────────── */
+    step("31_開台賬", (function(){ clickEl("#bk"); return LEDGER; })()); await w(400);
+    step("32_校勘記", (function(){ click("h_ledger_notes"); return PAPER_OPEN === "__notes"; })()); await w(500);
+    if(stop === "notes"){ report(); return; }
+    closePaper(); await w(240);
+    step("33_再入庫", click("h_ledger_enter")); await w(380);
+    step("34_收束_本幕已畢", !!F.f_act6_done);
+  }catch(err){ log.push("ERR=" + (err && err.message)); }
+  report();
+}
+
+window.__dd = { F:function(){ return F; }, INV:function(){ return INV; }, DONE:function(){ return DONE; },
+  CAM:function(){ return CAM; }, LEAD:function(){ return LEAD; }, P:function(){ return P; },
+  click:click, setCam:setCam, auto:runAuto, inActiveView:inActiveView,
+  state:function(){ return {F:F, INV:INV, CAM:CAM, SEL:SEL, DONE:DONE, READ:READ, LEAD:LEAD, P:P}; } };
+/* 探针（_selftest/probe-accept-act6.html）需要按名调用这几个只切覆盖层/重绘的函数 */
+window.showLedger = showLedger;
+window.render = render;
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();
+})();
+</script>
+</body>
+</html>

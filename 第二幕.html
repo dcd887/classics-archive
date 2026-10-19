@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 熔銅作 · 第二幕</title>
+<style>
+  /* ══ 色板：与第一幕逐字相同 —— 现有成品 dist/index.html 第 9–11 行的 9 个 token，
+        不新增第 8 色。本幕实机取值个数与第一幕同为 8 ══ */
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    --l1:2.2px; --l2:1.4px; --l3:0.9px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    display:flex; align-items:center; justify-content:center; padding:10px;
+  }
+  /* ══ 窗口自适应（宽 + 高，模板附录 A.2 · 坑 23）══════════════════════════
+     舞台恒为 1200:720。宽度同时受三个上界约束：视窗宽、设计宽 1200、以及
+     「视窗高 − 台账 64 − 上下留白 20 − 余量 4」换算过来的宽；三者取最小。
+     旧版只写 min(97vw,1200px)：窗口一矮，舞台仍按 1200 宽撑到 720 高，加上
+     台账 64 就超出视窗，body 又用 align-items:center 居中 → 上下被切。
+     实测视口 1214×707 时旧值舞台 top = −60、并出现纵向滚动条；此即修因。 */
+  #app{width:min(100%,1200px,calc((100vh - 88px) * 1.66667));display:flex;flex-direction:column;min-height:0}
+  #stage{display:block;width:100%;height:auto;aspect-ratio:1200/720;background:var(--paper);overflow:hidden}
+  #hud{height:64px;flex:0 0 64px;display:flex;align-items:center;gap:14px;
+       background:var(--paper);border-top:1px solid var(--line2);padding:0 6px}
+  #slots{display:flex;gap:4px}
+  .slot{width:56px;height:56px;border:1px solid transparent;position:relative;cursor:default}
+  .slot .under{position:absolute;left:8px;right:8px;bottom:6px;height:1px;background:var(--line2)}
+  .slot svg{display:block;width:52px;height:52px;margin:1px;transition:transform 120ms ease}
+  .slot.has{cursor:pointer}
+  .slot.sel{border-color:var(--zhu)}
+  .slot.sel svg{transform:translateY(-2px)}
+  #caption{margin-left:auto;margin-right:8px;max-width:62%;
+           font-family:"Kaiti SC","STKaiti","KaiTi",serif;
+           font-size:13px;line-height:1.6;color:var(--ink2);text-align:right;
+           opacity:0;transition:opacity 500ms ease}
+  #caption.on{opacity:1}
+  #caption.zhu{color:var(--zhu)}
+
+  /* ══ 线宽三级（与第一幕同值；vector-effect 保证跨视图/跨缩放不漂移）══ */
+  .l1{stroke:var(--ink);stroke-width:var(--l1);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l2{stroke:var(--ink2);stroke-width:var(--l2);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l3{stroke:var(--faint);stroke-width:var(--l3);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .miter{stroke-linejoin:miter}
+  .f-wood{fill:#b9a88c}
+  .f-card{fill:var(--card)}
+  .f-zhu{fill:var(--zhu)}
+  .f-bronze{fill:#b9a88c}
+  .tx{fill:var(--ink);font-family:"Songti SC","STSong",Georgia,serif}
+  .tx-k{fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .tx-z{fill:var(--zhu);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  /* 接触影：贴底 8% 墨、无方向性、每处只有一层。影子永不接鼠标 —— 它画在
+     所有热点之后，否则「地上那四件」的中心点会被自己脚下那道影子接走。 */
+  .shadow{fill:var(--ink);opacity:.08;stroke:none;pointer-events:none}
+  .ns *{vector-effect:non-scaling-stroke}
+
+  /* ══ 视图切换 ══ */
+  .view{opacity:0;pointer-events:none;transition:opacity 500ms ease}
+  .view.active{opacity:1;pointer-events:auto}
+
+  /* ══ 命中（修正 2026-10-17 · 模板附录 A.4）══════════════════════════════
+     【原本的病灶】下面那句 .hs .hit{pointer-events:all} 是「显式值」，会盖掉
+     祖先 .view{pointer-events:none} / #ledger:not(.on) / #bridge:not(.on) 的
+     继承；而 opacity:0 的元素照常参与命中测试。于是看不见的层仍然接得住鼠标，
+     而且文档顺序在后、画在上面 —— 真人点下去，命中的是「别人家的透明矩形」。
+     【修法】不动任何 .hit 的既有写法（自测仍走同一条路），只把非活动层整棵
+     子树用 !important 钉死；并在 showLedger / openBridge / closeBridge / boot
+     各调一次 syncModal()（#world 挂 .modal 时，底下场景整棵子树也不收鼠标）。*/
+  .view:not(.active), .view:not(.active) *,
+  #ledger:not(.on),   #ledger:not(.on) *,
+  #bridge:not(.on),   #bridge:not(.on) *,
+  .paper:not(.show),  .paper:not(.show) *{pointer-events:none!important}
+  #world.modal .view, #world.modal .view *{pointer-events:none!important}
+  /* 展开中的纸页自己吃鼠标；未展开时连这一层都不接（见上一条） */
+  #paper-layer{pointer-events:none}
+  #paper-layer .paper.show{pointer-events:auto}
+
+  /* ══ 热点：默认 / 可点 / 已取 三态光标 ══ */
+  .hs{cursor:default}
+  .hs .hit{fill:transparent;stroke:none;pointer-events:all}
+  .hs.on .hit{cursor:pointer}
+  .hs.on:hover .art path,.hs.on:hover .art rect,.hs.on:hover .art circle,
+  .hs.on:hover .art ellipse,.hs.on:hover .art line,.hs.on:hover .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.armed .art path,.hs.armed .art rect,.hs.armed .art circle,
+  .hs.armed .art ellipse,.hs.armed .art line,.hs.armed .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.on:hover .art .scenery path,.hs.on:hover .art .scenery circle,
+  .hs.on:hover .art .scenery ellipse{stroke:var(--faint);stroke-width:var(--l3)}
+  .hs.gone, .hs.gone *{pointer-events:none}
+  .hs.gone .art{opacity:0}
+  .hs.breathe .art *{stroke:var(--zhu)!important;animation:breathe 1.2s ease-in-out 2}
+  @keyframes breathe{0%,100%{stroke-opacity:1}50%{stroke-opacity:.4}}
+
+  /* ══ 视角规格（§十二）：轻斜投影 屏幕坐标 = 正面坐标 + 深度·(0,−0.5) ══
+     水平面用一个「有厚度的小矩形面」表达；进深线只走结构方向，不画纹理。
+     水平面专用 4 条短 L3 进深线，不画任何纹样、不画木纹、不画锤痕。 */
+  .floor{fill:var(--paper2);stroke:none}
+  .slab{fill:var(--card);stroke:none}
+  .recess{fill:var(--paper2);stroke:none}
+  .water{fill:var(--card);stroke:none}
+  #view-right .slab{fill:var(--paper2)}
+
+  /* ══ 世界变化 ① 炉膛：炉门（一块竖直面）向下滑开 30px，膛底进深面淡入 ══ */
+  #furnace-door{transform:translateY(0);transition:transform 620ms cubic-bezier(.2,.8,.2,1)}
+  #furnace.open #furnace-door{transform:translateY(30px)}
+  #furnace .fur-cavity{opacity:0;transition:opacity 300ms ease 320ms}
+  #furnace.open .fur-cavity{opacity:1}
+  #furnace .ember{opacity:0;transition:opacity 400ms ease 420ms}
+  #furnace.open .ember{opacity:1}
+
+  /* ══ 世界变化 ② 铸案：两只范槽的槽底是水平小面，放入后由 .filled 亮起 ══ */
+  .slot-face{fill:var(--paper2);stroke:none;opacity:1;transition:opacity 240ms ease}
+  .slot-glow{fill:var(--zhu);opacity:0;transition:opacity 300ms ease}
+  .hs.filled .slot-glow{opacity:.10}
+  .hs.filled .slot-edge{stroke:var(--ink);stroke-width:var(--l2)}
+
+  /* ══ 入范：铜块落到槽底（下沉 6px），落定后留在槽里 ══ */
+  @keyframes seatdown{0%{transform:translateY(-10px);opacity:.2}60%{transform:translateY(1px);opacity:1}100%{transform:translateY(0);opacity:1}}
+  .seating{animation:seatdown 260ms cubic-bezier(.3,.9,.3,1.2) 1 forwards}
+
+  /* ══ 弹回：放错的东西沿原路滑回原位（可复原、不锁死）══ */
+  @keyframes bounceback{
+    0%{transform:translate(0,0) rotate(0deg);opacity:1}
+    55%{transform:translate(calc(var(--bx)*.6),calc(var(--by)*.45)) rotate(-6deg);opacity:1}
+    100%{transform:translate(var(--bx),var(--by)) rotate(-12deg);opacity:0}
+  }
+  .bouncing{animation:bounceback 520ms ease-in forwards;pointer-events:none}
+  @keyframes shakeslot{0%,100%{transform:translateX(0)}35%{transform:translateX(-3px)}70%{transform:translateX(3px)}}
+  .shakeslot{animation:shakeslot 120ms ease-in-out 2}
+
+  /* ══ 入炉：合格的一块滑进炉门（可复原：回炉前它一直在炉口）══ */
+  @keyframes intofire{
+    0%{transform:translate(0,0);opacity:1}
+    70%{transform:translate(calc(var(--fx)*.8),calc(var(--fy)*.75));opacity:1}
+    100%{transform:translate(var(--fx),var(--fy));opacity:0}
+  }
+  .intofire{animation:intofire 620ms ease-in forwards;pointer-events:none}
+
+  /* ══ 炉口火光呼吸（唯一会动的光源；不做火苗形状）══ */
+  @keyframes ember{0%,100%{opacity:.92}50%{opacity:.6}}
+  #ember-halo{opacity:0;transition:opacity 500ms ease}
+  #furnace.open #ember-halo{opacity:1;animation:ember 3.1s ease-in-out infinite}
+
+  /* ══ 墙上指印（挂错累到 3 次才出现，一块 12% 朱砂）══ */
+  #prints{opacity:0;transition:opacity 260ms ease}
+  #prints.show{opacity:1}
+
+  /* ══ 纸（在场景内放大展开，不切屏、不加暗底遮罩）══ */
+  .paper{opacity:0;pointer-events:none;transition:opacity 260ms ease}
+  .paper.show{opacity:1;pointer-events:auto}
+  .paper-title{font-size:21px;fill:var(--ink);letter-spacing:.18em}
+  .paper-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  .paper-body{font-size:17px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.02em}
+  .paper-body .key{font-size:19px}
+  .paper-close{font-size:12px;fill:var(--faint);letter-spacing:.08em}
+
+  /* ══ 外壳：典藏司「值房台账」（与第一幕同一套，外加一幕间过渡页）══ */
+  #ledger{opacity:0;pointer-events:none;transition:opacity 420ms ease}
+  #ledger.on{opacity:1;pointer-events:auto}
+  .led-lede{font-size:26px;fill:var(--ink);letter-spacing:.22em}
+  .led-sub{font-size:13px;fill:var(--faint);letter-spacing:.12em}
+  .led-item{font-size:19px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.04em}
+  .led-item.done{fill:var(--faint)}
+  .led-act{font-size:21px;fill:var(--ink);letter-spacing:.2em}
+  .led-hint{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  /* 幕间过渡页：上一幕交下来的话，一页纸，读完再进 */
+  #bridge{opacity:0;pointer-events:none;transition:opacity 380ms ease}
+  #bridge.on{opacity:1;pointer-events:auto}
+  .br-lede{font-size:22px;fill:var(--ink);letter-spacing:.2em}
+  .br-body{font-size:16px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .br-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+
+  .slotslot svg{overflow:visible}
+  #boot{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+        justify-content:center;font-size:15px;color:var(--ink2);letter-spacing:.3em;z-index:9}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+
+<div id="boot">熔銅作</div>
+
+<div id="app">
+  <svg id="stage" viewBox="0 0 1200 720" shape-rendering="geometricPrecision"
+       xmlns="http://www.w3.org/2000/svg" role="application" aria-label="典藏司熔銅作 第二幕">
+    <defs>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="n"/>
+        <feColorMatrix in="n" type="saturate" values="0"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+    <g id="world">
+
+      <!-- ══════════════════ view-room ══════════════════
+           视角：与第一幕同一台虚拟相机、同一斜率 k=0.5（§十二）。
+           本场景深度预算：地面随画面裁切 / 炉底进深 20 / 案面进深 60 /
+           范槽进深 12 / 水盆水面进深 30 / 水盆外沿进深 90。全部 ≤ 80。 -->
+      <g id="view-room" class="view active">
+        <!-- ① 地面（水平面）：远边在墙脚 y≈631，近边落在画面之外 -->
+        <path class="floor" d="M42,630.4 C300,629.6 700,631.2 1158,628.6 L1158,726 L42,726 Z"/>
+        <path class="l3 miter" d="M150,700 C400,698.6 800,701 1086,698.8"/>
+        <path class="l3 miter" d="M1136,646 C1137.2,678 1136.4,700 1137,718"/>
+        <path class="l3 miter" d="M62,646 C61,678 61.8,700 61,718"/>
+        <!-- ② 墙脚交界（墙与地的那一笔）：家具压其上，只在空处露头 -->
+        <path class="l2" d="M42,630.6 C300,628.8 700,631.4 1158,629.6"/>
+
+        <!-- B′ 檐梁（一根旧木横梁，横贯后墙上沿） -->
+        <g class="scenery">
+          <path class="l1 f-wood" d="M64,44.4 C420,42.6 800,45.2 1138,43.6 L1139,77.4 C800,79.2 420,76.6 64,78.4 Z"/>
+          <path class="l3" d="M64,61.4 C420,59.6 800,62.2 1138,60.6"/>
+        </g>
+
+        <!-- B 風管（陶管自炉口引向左墙；两段 + 一道接缝） -->
+        <g class="hs on" data-hs="h_duct">
+          <rect class="hit" x="388" y="140" width="124" height="84"/>
+          <g class="art">
+            <path class="l1 f-card" d="M392,166.4 C428,164.6 466,167.2 502,165.6 L503,182.4 C466,184.2 428,181.6 392,183.4 Z"/>
+            <path class="l2" d="M446,166 L446,183"/>
+            <path class="l3 miter" d="M404,167 L404,183 M486,166.4 L486,182.4"/>
+          </g>
+        </g>
+
+        <!-- D 墙上木签 · 上半段的载体（链①「翻书可查」的第一处） -->
+        <g class="hs on" data-hs="h_ledge_a">
+          <rect class="hit" x="560" y="120" width="136" height="120"/>
+          <g class="art">
+            <path class="l1 f-card" d="M566,128.4 L688,126.6 L689,232.4 L567,234.2 Z"/>
+            <path class="l3" d="M578,146 L676,146 M578,164 L660,164 M578,182 L676,182 M578,200 L644,200"/>
+            <path class="l2" d="M628,234 L628,250"/>
+            <circle class="l2" cx="628" cy="256" r="5" fill="none"/>
+          </g>
+        </g>
+        <!-- D′ 墙上木签 · 第二支（取下后是残卷下半段） -->
+        <g class="hs on" data-hs="h_ledge_b">
+          <rect class="hit" x="690" y="282" width="136" height="120"/>
+          <g class="art">
+            <path class="l1 f-card" d="M696,290.4 L818,288.6 L819,394.4 L697,396.2 Z"/>
+            <path class="l3" d="M708,308 L806,308 M708,326 L790,326 M708,344 L806,344"/>
+            <path class="l2" d="M758,396 L758,412"/>
+            <circle class="l2" cx="758" cy="418" r="5" fill="none"/>
+          </g>
+        </g>
+
+        <!-- D′ 墙上纸条 · 本作的三句体例（环境物件，不是题目框）—— 挪到右下墙，
+             避开左下的炉口与右上的高柜 -->
+        <g class="hs on" data-hs="h_rule">
+          <rect class="hit" x="872" y="176" width="252" height="94"/>
+          <g class="art">
+            <path class="l1 f-card" d="M878,182.4 C956,180.8 1040,183.2 1108,181.6 L1109,264.4 C1040,266.2 956,263.6 878,265.4 Z"/>
+            <path class="l3" style="stroke:var(--zhu)" d="M892,200 L1092,200 M892,220 L1040,220 M892,240 L1000,240"/>
+          </g>
+        </g>
+
+        <!-- E 高柜（内有本作残卷可查）—— 挪到最右，与左下角的水火之器彻底分开
+             （上一版柜门与水盆叠在一起，读起来像「柜子里放着一只盆」）。
+             柜体在地面带上，不与任何器物共用像素。 -->
+        <g class="hs on" data-hs="h_cabinet">
+          <rect class="hit" x="974" y="296" width="208" height="326"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M988,300.4 C1046,298.6 1110,301.2 1150,299.6 L1152,620.4 C1110,622.2 1046,619.6 988,621.4 Z"/>
+            <path class="l1 miter" d="M1004,320.4 C1046,318.8 1110,321.2 1132,319.6 L1134,602.4 C1110,604.2 1046,601.6 1004,603.4 Z"/>
+            <path class="l2" d="M1068,320 L1068,602"/>
+            <circle class="l2" cx="1054" cy="440" r="5" fill="none"/>
+            <circle class="l2" cx="1082" cy="440" r="5" fill="none"/>
+            <path class="l2" d="M1042,428 L1042,452 M1094,428 L1094,452"/>
+          </g>
+        </g>
+
+        <!-- A 熔爐（焦点之一：全場唯一有「膛口进深」的器物）
+             口面 = 水平小面（椭圆，2:1），口沿内一圈 → 膛内后壁 → 膛底；
+             炉门是一块竖直面，向下滑开 30px 才看得见膛底与炉火。 -->
+        <g id="furnace" class="hs on" data-hs="h_furnace">
+          <rect class="hit" x="122" y="234" width="252" height="412"/>
+          <g class="art">
+            <!-- 炉身（圆筒正面）：x 130–356、y 254–624 -->
+            <path class="l1 f-wood" d="M192,254 C154,266 130,320 130,392 C130,520 154,598 192,624
+              L294,624 C332,598 356,520 356,392 C356,320 332,266 294,254 Z"/>
+            <!-- 口面（水平面）：一块 2:1 的椭圆小面，外沿 L1、口沿 L2 -->
+            <ellipse class="floor" cx="243" cy="256" rx="50" ry="25"/>
+            <ellipse class="l1" cx="243" cy="256" rx="50" ry="25" fill="none"/>
+            <ellipse class="l2" cx="243" cy="256" rx="35" ry="17.5" fill="none"/>
+            <!-- 膛内（后壁 + 膛底进深线）：炉门向下滑开后才淡入 -->
+            <g class="fur-cavity">
+              <path class="recess" d="M208,258 C226,247 260,247 278,258 L278,284 C260,295 226,295 208,284 Z"/>
+              <path class="l2 miter" d="M208,258 L208,284 M278,258 L278,284 M208,284 C226,295 260,295 278,284"/>
+              <path class="l3 miter" d="M224,262 L224,288 M262,262 L262,288"/>
+            </g>
+            <!-- 炉门（竖直面）：向下滑开 30px -->
+            <g id="furnace-door">
+              <path class="l1 f-card" d="M190,300.4 C222,298.6 262,301.2 296,299.6 L297,366.4 C262,368.2 222,365.6 190,367.4 Z"/>
+              <path class="l2" d="M216,316 C236,314.6 260,317 282,315.6"/>
+              <path class="l3" d="M202,340 L284,340 M202,356 L270,356"/>
+            </g>
+            <!-- 炉火（只是一圈朱砂透明度，不画火苗形状） -->
+            <g class="ember">
+              <ellipse cx="243" cy="292" rx="28" ry="13" fill="var(--zhu)" opacity=".055"/>
+              <ellipse cx="243" cy="292" rx="16" ry="7.5" fill="var(--zhu)" opacity=".085"/>
+            </g>
+            <!-- 锈痕（既有朱砂，只作透明度叠色，不是新色） -->
+            <ellipse cx="258" cy="330" rx="15" ry="8" fill="var(--zhu)" opacity=".05"/>
+            <path class="l3" d="M166,404 C174,470 186,540 202,592 M330,404 C322,470 310,540 294,592"/>
+            <!-- 底座（一圈砖台）：水平小面 + 前棱 + 两条进深线 -->
+            <path class="floor" d="M118,604 C186,595 300,595 368,604 L368,622 C300,632 186,632 118,622 Z"/>
+            <path class="l1" d="M118,604 C186,595 300,595 368,604 L368,622 C300,632 186,632 118,622 Z"/>
+            <path class="l3 miter" d="M150,599 L150,627 M336,599 L336,627"/>
+          </g>
+        </g>
+        <g id="ember-halo" pointer-events="none">
+          <circle cx="243" cy="300" r="66" fill="var(--zhu)" opacity=".016"/>
+          <circle cx="243" cy="300" r="50" fill="var(--zhu)" opacity=".022"/>
+          <circle cx="243" cy="300" r="34" fill="var(--zhu)" opacity=".028"/>
+          <circle cx="243" cy="300" r="21" fill="var(--zhu)" opacity=".040"/>
+        </g>
+
+        <!-- C 鑄案（焦点之二：案面是水平面，进深 60 → 可见带高 30px；
+             上嵌两只范槽，槽底是水平小面，进深 12 → 可见带高 6px） -->
+        <g id="bench" class="hs on" data-hs="h_bench">
+          <rect class="hit" x="342" y="356" width="290" height="210"/>
+          <g class="art">
+            <!-- 案面（水平面，进深 100 → 可见带高 50px）：x 352–612、y 418–468 -->
+            <path class="floor" d="M352,418.4 C450,416.6 530,419.2 612,417.6 L612,468.4 C530,470.2 450,467.6 352,469.4 Z"/>
+            <path class="l1" d="M352,418.4 C450,416.6 530,419.2 612,417.6 L612,468.4 C530,470.2 450,467.6 352,469.4 L352,418.4 Z"/>
+            <path class="l3 miter" d="M400,419.4 L400,468 M520,418.2 L520,466.8 M590,417.8 L590,466.4"/>
+            <!-- 案面前棱厚度面 + 案腿 + 下枨 -->
+            <path class="l1 f-wood" d="M352,468.4 C450,466.6 530,469.2 612,467.6 L612,478.4 C530,480.2 450,477.6 352,479.4 Z"/>
+            <path class="l1 f-wood" d="M360,478 C370,477.2 388,478.4 398,477.6 L400,596.4 C388,598.2 370,596.6 360,597.4 Z"/>
+            <path class="l1 f-wood" d="M564,477.6 C574,476.8 590,478.2 600,477.4 L600,596.4 C590,598.2 574,596.6 564,597.4 Z"/>
+            <path class="l1 f-wood" d="M356,566.4 C450,564.6 530,567.2 604,565.6 L604,584.4 C530,586.2 450,583.6 356,585.4 Z"/>
+            <!-- 案身中枨：一条 L2 结构线（与第一幕同一语言，不加平涂块） -->
+            <path class="l2" d="M386,522.4 C460,520.8 540,523.6 592,522.8"/>
+            <!-- 案上：水里分出来的那一小段铜（摆件；两块实物另有热点）。
+                 水还没灌下去之前它不在案上 —— 由 render() 控制显隐。 -->
+            <g id="cu-on-bench" class="scenery" style="display:none">
+              <path class="l1 f-bronze" d="M484,432.4 C494,431.6 504,433.2 514,432.2 L514,446.4 C504,447.2 494,445.6 484,446.6 Z"/>
+            </g>
+            <!-- 案面右沿的一道刻痕（支线 S2 的第一处） -->
+            <path class="l3 miter scenery" d="M596,420 L600,466"/>
+          </g>
+        </g>
+
+        <!-- 范槽甲（牡）与范槽乙（牝）：各自是一个**独立的 .hs**，不是铸案的后代。
+             两条理由：① .hs 不许嵌套 .hs —— 内层永远点不动（模板 §五 坑 1）；
+             ② 父级那张 .hit 会先在槽心接到点击。故放在铸案之后作兄弟节点：
+             画在案面之上，槽心先命中自己；每个槽恰好一张 .hit。 -->
+        <g id="slot-a" class="hs on slot" data-hs="h_slot_a">
+          <rect class="hit" x="398" y="421" width="72" height="28"/>
+          <g class="art">
+            <path class="slot-face" d="M404,428.4 C422,427.4 442,429.2 460,428.2 L460,442.4 C442,443.4 422,441.6 404,442.6 Z"/>
+            <path class="l1 miter slot-edge" d="M402,426 L402,446 L464,445 L464,425 Z" fill="none"/>
+            <path class="l3 miter slot-depth" d="M418,427 L418,443 M448,426.6 L448,442.6"/>
+            <ellipse class="slot-glow" cx="433" cy="435" rx="30" ry="10"/>
+          </g>
+        </g>
+        <g id="slot-b" class="hs on slot" data-hs="h_slot_b">
+          <rect class="hit" x="514" y="421" width="72" height="28"/>
+          <g class="art">
+            <path class="slot-face" d="M520,428.4 C538,427.4 558,429.2 576,428.2 L576,442.4 C558,443.4 538,441.6 520,442.6 Z"/>
+            <path class="l1 miter slot-edge" d="M518,426 L518,446 L580,445 L580,425 Z" fill="none"/>
+            <path class="l3 miter slot-depth" d="M534,427 L534,443 M564,426.6 L564,442.6"/>
+            <ellipse class="slot-glow" cx="549" cy="435" rx="30" ry="10"/>
+          </g>
+        </g>
+
+        <!-- 案面右沿的刻痕（支线 S2：两处刻痕对得上；只是刻痕，不画符号） -->
+        <g id="hs_side_mark" class="hs on" data-hs="h_side_mark">
+          <rect class="hit" x="586" y="410" width="34" height="66"/>
+          <g class="art"><path class="l3 miter" d="M596,420 L600,466"/></g>
+        </g>
+        <!-- 案沿搁着的长柄勺（支线 S3）—— 贴着案身右侧，不与铜块抢位置 -->
+        <g id="hs_side_ladle" class="hs on" data-hs="h_side_ladle">
+          <rect class="hit" x="582" y="480" width="70" height="48"/>
+          <g class="art">
+            <path class="l1 f-card" d="M588,494.4 C604,492.6 622,495.2 640,493.6 L642,502.4 C622,504.2 604,501.6 588,503.4 Z"/>
+            <path class="l2" d="M640,498 L646,486"/>
+            <ellipse class="l2" cx="650" cy="482" rx="7" ry="5" fill="none"/>
+          </g>
+        </g>
+
+        <!-- 案上的两块铜（可取的实物；与第一幕同一套「取物件」语言）
+             两块都坐在案面**后沿**上（y 395–418）：旧版压在两只范槽口上（y 407–430），
+             于是槽心被它们那张 .hit 盖住、槽就点不动。上移 12px 后与槽带（y 421–449）
+             彻底分开，两块的中心点也各归自己。 -->
+        <g id="hs_cu_convex" class="hs on gone" data-hs="h_cu_convex">
+          <rect class="hit" x="392" y="370" width="76" height="48"/>
+          <g class="art">
+            <path class="l1 f-bronze" d="M400,404.4 C412,402.6 428,395.6 444,397.4 L454,414.4 C438,416.6 416,416.2 402,418.4 Z"/>
+            <!-- 凸面：一条 L2 弧线示意隆起，不画高光、不用渐变 -->
+            <path class="l2" d="M414,407 C422,398 434,395 446,399"/>
+          </g>
+        </g>
+        <g id="hs_cu_concave" class="hs on gone" data-hs="h_cu_concave">
+          <rect class="hit" x="508" y="370" width="76" height="48"/>
+          <g class="art">
+            <path class="l1 f-bronze" d="M516,404.4 C530,402.6 550,398.4 568,400.2 L576,416.4 C556,418.6 532,416.2 518,418.4 Z"/>
+            <!-- 凹面：一块朝上的水平小面 + 一圈 L2 内沿，示意凹陷 -->
+            <path class="slab" d="M528,406.4 C540,405.4 552,406.6 564,405.8 L564,413.6 C552,414.6 540,413.4 528,414.2 Z"/>
+            <path class="l2 miter" d="M528,406.4 L528,414.2 M564,405.8 L564,413.6 M528,414.2 C540,414.6 552,414.6 564,413.6" fill="none"/>
+          </g>
+        </g>
+
+        <!-- F 水火之器（焦点之三：圆形平底器，口沿水面进深 30 → 可见带高 15px）
+             器身是一段圆筒侧影 + 一条接缝；水在口沿下，另有明沟引水。 -->
+        <g id="basin" class="hs on" data-hs="h_basin">
+          <rect class="hit" x="662" y="494" width="188" height="102"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M706,518 C678,524 662,543 660,562 C658,580 676,592 756,592
+              C818,592 830,580 828,562 C826,543 810,524 782,518 Z"/>
+            <ellipse class="water" cx="744" cy="521" rx="56" ry="22"/>
+            <ellipse class="l1" cx="744" cy="521" rx="56" ry="22" fill="none"/>
+            <ellipse class="l2" cx="744" cy="521" rx="44" ry="17" fill="none"/>
+            <path class="l3 miter" d="M700,523 L700,537 M788,523 L788,537"/>
+            <path class="l2" d="M690,570 C722,574 770,574 800,570"/>
+          </g>
+        </g>
+        <!-- 明沟（水自器底引出的一条浅槽；是「地」上的结构线，不是地砖缝。
+             刻意画长一点，免得被读成土墙纹理） -->
+        <g class="scenery">
+          <path class="l3 miter" d="M500,606 C600,602 740,602 856,606"/>
+          <path class="l3 miter" d="M500,606 L500,618 M856,606 L856,618"/>
+          <path class="l3 miter" d="M672,604 L672,616"/>
+        </g>
+
+        <!-- G 件料：地上四件东西（全部落在那条地面带里，摆在炉前的地面上）
+             三件当出（辱金），一件留用 —— 判断的载体就是「曾经何用」。 -->
+        <g id="hs_g_grave" class="hs on gone" data-hs="h_g_grave">
+          <rect class="hit" x="30" y="612" width="112" height="76"/>
+          <g class="art">
+            <!-- 塜器：一件出自丘塚的残片（缺口一块，不画纹饰） -->
+            <path class="l1 f-bronze" d="M44,650.4 C64,642.6 92,644.2 116,648.4 L122,682.4
+              C98,688.2 66,686.6 46,680.4 Z"/>
+            <path class="l2" d="M60,660 C78,656.6 96,658 112,661.4"/>
+            <path class="l3 miter" d="M66,666 L66,682 M100,666 L100,682"/>
+          </g>
+        </g>
+        <g id="hs_g_hairpin" class="hs on gone" data-hs="h_g_hairpin">
+          <rect class="hit" x="152" y="616" width="126" height="72"/>
+          <g class="art">
+            <!-- 釵釧：两枚细长首饰（一勾一环），平摆在地上 -->
+            <path class="l1 f-card" d="M170,672.4 C204,666.6 240,668.2 274,672.4 L274,681.4
+              C240,677.2 204,675.6 170,681.4 Z"/>
+            <path class="l3" d="M180,676 L262,676"/>
+            <circle class="l2" cx="278" cy="660" r="9" fill="none"/>
+            <path class="l2" d="M272,668 L260,676"/>
+          </g>
+        </g>
+        <g id="hs_g_lav" class="hs on gone" data-hs="h_g_lav">
+          <!-- 热区只框住这件矮圆小器自己的落影带（y 666–714）。旧版从 y606 起，
+               把它上面那块炉渣的热区整个包了进去，两件的中心点互相盖住。 -->
+          <rect class="hit" x="292" y="666" width="136" height="48"/>
+          <g class="art">
+            <!-- 溲器：一件矮圆小器（与右边那口大盆不同高、不同径） -->
+            <path class="l1 f-wood" d="M322,672 C306,674 296,682 296,692 C296,702 314,708 370,708
+              C416,708 424,702 424,692 C424,682 414,674 398,672 Z"/>
+            <ellipse class="floor" cx="360" cy="673" rx="38" ry="13"/>
+            <ellipse class="l1" cx="360" cy="673" rx="38" ry="13" fill="none"/>
+            <ellipse class="l2" cx="360" cy="673" rx="28" ry="9" fill="none"/>
+          </g>
+        </g>
+        <g id="hs_g_clean" class="hs on" data-hs="h_g_clean">
+          <!-- 素金：一块没用过的金饼（一枚厚圆的侧影 + 顶面水平小面）。
+               旧版这个热点带着 .gone 而 render() 从不摘掉它 —— 于是这块金
+               从来没被画出来（.hs.gone .art{opacity:0}），也永远点不动；
+               可「点它是这一链的判断本身」。故去掉那个残留的 .gone。 -->
+          <rect class="hit" x="424" y="612" width="128" height="92"/>
+          <g class="art">
+            <!-- 素金：一块没用过的金饼（一枚厚圆的侧影 + 顶面水平小面） -->
+            <path class="l1 f-bronze" d="M462,662 C436,664 420,672 420,680 C420,690 444,698 490,698
+              C532,698 550,690 550,680 C550,672 536,664 512,662 Z"/>
+            <ellipse class="floor" cx="485" cy="663" rx="46" ry="15"/>
+            <ellipse class="l1" cx="485" cy="663" rx="46" ry="15" fill="none"/>
+            <path class="l3 miter" d="M456,666 L456,694 M516,666 L516,694"/>
+          </g>
+        </g>
+
+        <!-- 炉脚边结着的一小块炉渣（支线 S4） -->
+        <g id="hs_side_slag" class="hs on" data-hs="h_side_slag">
+          <!-- 同上：只框住炉渣自己（y 640–666），不再向下压住那件矮圆小器。 -->
+          <rect class="hit" x="334" y="640" width="58" height="26"/>
+          <g class="art">
+            <path class="l1 f-bronze" d="M340,650.4 C354,644.6 372,645.2 386,650.4 L388,664.4
+              C372,669.2 354,668.6 340,664.4 Z"/>
+            <path class="l3" d="M350,654 L374,652"/>
+          </g>
+        </g>
+
+        <!-- 墙上指印（放错累到三次才出现；一块 12% 朱砂，不是新色） -->
+        <g id="prints" pointer-events="none">
+          <ellipse cx="900" cy="456" rx="17" ry="23" fill="var(--zhu)" opacity=".12"/>
+          <ellipse cx="930" cy="462" rx="12" ry="17" fill="var(--zhu)" opacity=".12"/>
+        </g>
+
+        <!-- 地面接触影：唯一一层阴影（贴底 8% 墨、无方向性） -->
+        <rect class="shadow" x="140" y="630" width="238" height="7" rx="3"/>
+        <rect class="shadow" x="352" y="600" width="256" height="7" rx="3"/>
+        <rect class="shadow" x="664" y="594" width="182" height="7" rx="3"/>
+        <rect class="shadow" x="30" y="688" width="540" height="7" rx="3"/>
+
+        <!-- 噪点层：一张，全场景共用，近景不再加。
+             fill 显式写成 --paper：滤镜的产物由 feTurbulence 自己生成，不看这一层
+             原来填什么，所以画面一模一样；但旧版没写 fill，实机 computed fill 就是
+             默认的纯黑 rgb(0,0,0) —— 色板取值因此多出一个第 9 色。 -->
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)" filter="url(#grain)"
+              opacity="0.045" style="mix-blend-mode:multiply" pointer-events="none"/>
+      </g>
+
+      <!-- ══════════════════ view-right ══════════════════
+           炉膛近景：膛口放大。膛底是水平小面（进深 40 → 可见带高 20px），
+           膛内后壁上贴着一张残卷的下半段（链②的原文载体）。 -->
+      <g id="view-right" class="view" transform="translate(120,40)">
+        <path class="l1 f-wood" d="M262,92.4 C480,90.6 720,93.2 938,91.6 L940,628.4 C720,630.2 480,627.6 262,629.4 Z"/>
+        <path class="l1 miter" d="M286,116.4 C480,114.8 720,117.2 914,115.6 L916,604.4 C720,606.2 480,603.6 286,605.4 Z"/>
+        <!-- 膛口内沿（一圈） -->
+        <ellipse class="l2" cx="600" cy="330" rx="252" ry="118" fill="none"/>
+        <!-- 膛内后壁 -->
+        <path class="recess" d="M348,330 C400,246 800,246 852,330 L852,470 C800,556 400,556 348,470 Z"/>
+        <!-- 后壁左右两条进深线：**各写一条 path**。旧版把两条互不相连的线写在
+             同一条 path 里，它的 bbox 于是有 504×140 那么大（舞台 8%）、里面却
+             什么也没画 —— 任何按 bbox 判「空框」的检出器都会报成没画完的大空框。 -->
+        <path class="l2 miter" d="M348,330 L348,470"/>
+        <path class="l2 miter" d="M852,330 L852,470"/>
+        <path class="l3 miter" d="M400,308 L400,492 M600,268 L600,532 M800,308 L800,492"/>
+        <!-- 膛底（水平小面）+ 板厚前棱 -->
+        <path class="slab" d="M390,486 C480,470 720,470 810,486 L810,506 C720,522 480,522 390,506 Z"/>
+        <path class="l1" d="M390,486 C480,470 720,470 810,486 L810,506 C720,522 480,522 390,506 Z"/>
+        <path class="l3 miter" d="M470,478 L470,500 M730,478 L730,500"/>
+        <!-- 炉火：膛底一圈朱砂透明度 -->
+        <ellipse cx="600" cy="492" rx="150" ry="34" fill="var(--zhu)" opacity=".06"/>
+        <ellipse cx="600" cy="492" rx="92" ry="20" fill="var(--zhu)" opacity=".09"/>
+        <!-- 贴在膛内后壁上的残卷下半段 -->
+        <g id="scrap-half" class="hs on gone" data-hs="h_scrap_half">
+          <rect class="hit" x="392" y="250" width="416" height="212"/>
+          <g class="art">
+            <path class="l1 f-card" d="M404,300.4 C520,296.6 680,300.2 796,296.4 L798,452.4
+              C680,456.2 520,452.6 404,456.4 Z"/>
+            <path class="l3" style="stroke:var(--zhu)" d="M440,330 L760,328 M440,360 L700,358"/>
+            <path class="l3" d="M440,392 L760,390 M440,418 L680,416 M440,440 L760,438"/>
+          </g>
+        </g>
+        <g id="cu-in-furnace" class="scenery">
+          <path class="l1 f-bronze" d="M520,470 C560,466 660,466 700,470 L704,486 C660,490 560,490 516,486 Z"/>
+        </g>
+        <text class="tx-k" x="600" y="646" font-size="14" fill="var(--faint)" text-anchor="middle">點空白處 · 退回作中</text>
+      </g>
+      <!-- ══════════════════ 值房台账（幕间切换的枢纽）══════════════════ -->
+      <g id="ledger" class="on">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-wood" d="M262,92.4 C480,90.6 720,93.2 938,91.6 L940,628.4 C720,630.2 480,627.6 262,629.4 Z"/>
+          <path class="l1 f-card" d="M286,116.4 C480,114.8 720,117.2 914,115.6 L916,604.4 C720,606.2 480,603.6 286,605.4 Z"/>
+          <path class="l2" d="M300,196 C480,194.4 720,197 900,195.4"/>
+          <path class="l2" d="M300,448 C480,446.4 720,449 900,447.4"/>
+        </g>
+        <text class="led-lede" x="600" y="160" text-anchor="middle">值房 · 今日差事</text>
+        <text class="led-sub" x="600" y="182" text-anchor="middle">典藏司 熔銅作 · 夜直（第二幕）</text>
+
+        <g id="led-items">
+          <circle id="led-dot-1" class="l2" cx="356" cy="248" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-1" x="390" y="255">爐中之銅，自分牡牝，按形入范</text>
+          <circle id="led-dot-2" class="l2" cx="356" cy="322" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-2" x="390" y="329">作中四件器具，择其可合鍊者入爐</text>
+          <circle id="led-dot-3" class="l2" cx="356" cy="396" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-3" x="390" y="403">所引殘卷，取本作之書對之</text>
+        </g>
+
+        <g class="hs on" data-hs="h_ledger_enter">
+          <rect class="hit" x="330" y="470" width="540" height="72"/>
+          <g class="art"><path class="l1 miter" d="M336,476 L864,476 L864,536 L336,536 Z" fill="none"/></g>
+          <text class="led-act" x="600" y="518" text-anchor="middle">推 門 入 作</text>
+        </g>
+        <g id="hs_led_bridge" class="hs on" data-hs="h_ledger_bridge">
+          <rect class="hit" x="330" y="548" width="260" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M336,554 L584,554 L584,602 L336,602 Z" fill="none"/>
+            <text class="led-act" x="460" y="586" text-anchor="middle" font-size="17">幕間：上一幕交下來的話</text>
+          </g>
+        </g>
+        <g id="hs_led_notes" class="hs on gone" data-hs="h_ledger_notes">
+          <rect class="hit" x="612" y="548" width="258" height="60"/>
+          <g class="art">
+            <path class="l1 miter" d="M618,554 L864,554 L864,602 L618,602 Z" fill="none"/>
+            <text class="led-act" x="741" y="586" text-anchor="middle" font-size="17">取 閱 校 勘 記</text>
+          </g>
+        </g>
+        <text class="led-hint" id="led-hint" x="600" y="668" text-anchor="middle">作裡沒有題目 —— 只有一座爐、一案范槽、一器水火、四件舊料。</text>
+      </g>
+
+      <!-- ══════════════════ 幕间过渡页（跨幕累积的载体）══════════════════ -->
+      <g id="bridge">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-card" d="M312,132.4 C520,130.6 720,133.2 896,131.6 L898,588.4
+            C720,590.2 520,587.6 312,589.4 Z"/>
+          <path class="l1 f-wood" d="M330,112.4 C520,110.6 720,113.2 878,111.6 L880,140.4
+            C720,142.2 520,139.6 330,141.4 Z"/>
+        </g>
+        <text class="br-lede" x="600" y="188" text-anchor="middle">幕 間 · 校書閣 → 熔銅作</text>
+        <text class="br-sub" x="600" y="212" text-anchor="middle">典藏司 夜直 第二班</text>
+        <g id="bridge-lines"></g>
+        <g class="hs on" data-hs="h_bridge_go">
+          <rect class="hit" x="470" y="530" width="260" height="62"/>
+          <g class="art"><path class="l1 miter" d="M476,536 L724,536 L724,586 L476,586 Z" fill="none"/></g>
+          <text class="led-act" x="600" y="572" text-anchor="middle" font-size="19">收 起 · 進 熔 銅 作</text>
+        </g>
+        <g class="hs on" data-hs="h_bridge_back">
+          <rect class="hit" x="132" y="530" width="200" height="62"/>
+          <g class="art"><path class="l1 miter" d="M138,536 L326,536 L326,586 L138,586 Z" fill="none"/></g>
+          <text class="led-act" x="232" y="572" text-anchor="middle" font-size="17">回 台 賬</text>
+        </g>
+      </g>
+
+      <!-- ══════════════════ 纸：在场景内放大展开 ══════════════════ -->
+      <g id="paper-layer"></g>
+
+      <!-- 声 / 簿 -->
+      <g id="snd" style="cursor:pointer">
+        <rect x="1136" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1158" y="50" font-size="19" text-anchor="middle">聲</text>
+      </g>
+      <g id="bk" style="cursor:pointer">
+        <rect x="1084" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1106" y="50" font-size="19" text-anchor="middle">簿</text>
+      </g>
+    </g>
+  </svg>
+
+  <div id="hud">
+    <div id="slots"></div>
+    <div id="caption"></div>
+  </div>
+</div>
+
+<svg id="symdefs" width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="symroot"></defs></svg>
+
+<script>
+"use strict";
+(function(){
+
+/* ══ 0. 存档：与第一幕同一把钥匙、同一结构（幕间协议 §1.3）════════════
+   第一幕写：{f, inv, read, cam, ts}
+   第二幕写：同一把钥匙 + 同一结构 + 三个「逐幕累积」字段（只加不改）：
+     act   本幕幕号（整数）
+     done  已收束的幕（字符串数组，幂等）
+     notes 《校勘记》追加日志（只增不改；正文仍由 flags 现算）
+   → 跨幕累积不需要迁移脚本；上一幕的 f 键原样保留。 */
+var SAVE_KEY = "diandangsi.rustylake.v1";
+var NOTES_KEY = "diandangsi.rustylake.v1.notes";
+var ACT_NO = 2, ACT_ID = "act2";
+
+/* ══ 1. 值房台账 → 熔铜作：上一幕留下的痕迹（跨幕累积的读入侧）════════
+   本幕开场先读上一幕的存档：读过哪些页、办完几件差事，决定过渡页上
+   写哪几句。读不到（第一次玩本幕）就按「未办」显示 —— 不假装办过。 */
+var PREV = (function(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return null;
+    return o;
+  }catch(e){ return null; }
+})();
+function prevHas(k){ return !!(PREV && PREV.f && PREV.f[k]); }
+function prevRead(k){ return !!(PREV && PREV.read && PREV.read.indexOf(k) >= 0); }
+
+/* ══ 2. flags ═══════════════════════════════════════════════════════ */
+var FLAG_KEYS = [
+  "f_seen_act2","f_ledge_a_read","f_ledge_b_read","f_rule_read","f_cabinet_open",
+  "f_vol_read","f_bridge_read",
+  "f_g_grave_out","f_g_hairpin_out","f_g_lav_out","f_chain1_done",
+  "f_furnace_open","f_cu_convex_taken","f_cu_concave_taken",
+  "f_cu_convex_in","f_cu_concave_in","f_chain2_done",
+  "f_scrap2_taken","f_act2_done","f_side_duct","f_side_a_mark","f_side_b_mark",
+  "f_side_ladle","f_side_slag"
+];
+var F = {}, INV = [], READ = [], SEL = null, CAM = "room";
+
+function resetState(){
+  F = {}; FLAG_KEYS.forEach(function(k){ F[k]=false; });
+  F.f_misplaced_count = 0;      /* 与第一幕同名同义：放错的次数 */
+  INV = []; READ = []; SEL = null; CAM = "room";
+}
+
+/* ══ 3. 存读档（幕间协议 §1.3：只加字段，不改字段语义，不改键名）══════ */
+var saveT = null;
+/* done / notes 的读入：从上一幕写下的存档里承接（只读，丢了就空数组） */
+var DONE = (PREV && PREV.done && PREV.done.slice) ? PREV.done.slice() : [];
+var NOTE_LOG = (PREV && PREV.notes && PREV.notes.slice) ? PREV.notes.slice() : [];
+function markActDone(){
+  if(F.f_act2_done && DONE.indexOf(ACT_ID) < 0) DONE.push(ACT_ID);
+}
+function appendNotes(){
+  /* 把本幕已成立的条目追加进 notes 日志（幂等：同一条不重复追加） */
+  var es = noteEntries();
+  for(var i=0;i<es.length;i++){
+    var key = ACT_NO + "|" + es[i].h;
+    var has = false;
+    for(var j=0;j<NOTE_LOG.length;j++){ if(NOTE_LOG[j].key === key){ has = true; break; } }
+    if(!has) NOTE_LOG.push({ key:key, act:ACT_NO, h:es[i].h, l:es[i].l });
+  }
+}
+function saveNow(){
+  try{
+    markActDone(); appendNotes();
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      f:F, inv:INV, read:READ, cam:CAM, ts:Date.now(),
+      act:ACT_NO, done:DONE, notes:NOTE_LOG
+    }));
+  }catch(e){}
+}
+function saveDebounced(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
+function load(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return false;
+    FLAG_KEYS.forEach(function(k){ if(k in o.f) F[k]=o.f[k]; });
+    if(typeof o.f.f_misplaced_count === "number") F.f_misplaced_count = o.f.f_misplaced_count;
+    INV = o.inv || []; READ = o.read || []; CAM = o.cam || "room";
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ══ 4. DOM ═════════════════════════════════════════════════════════ */
+var $ = function(s){ return document.querySelector(s); };
+var stage = $("#stage"), world = $("#world"), paperLayer = $("#paper-layer");
+var caption = $("#caption"), slotsEl = $("#slots");
+function el(tag, attrs){ var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  if(attrs) for(var k in attrs) n.setAttribute(k, attrs[k]); return n; }
+function mkPath(cls, d){ return el("path", { "class":cls, d:d }); }
+
+/* ══ 5. 场景代号 → 视图名（本幕只有主视图 + 炉膛近景两个视图）═════════ */
+function setCam(which){
+  CAM = which;
+  world.dataset.cam = which;
+  document.querySelectorAll(".view").forEach(function(v){
+    v.classList.toggle("active", v.id === "view-" + which);
+  });
+  applyArmed();
+}
+function goRoom(){ setCam("room"); }
+
+/* ══ 6. 物件表 ═══════════════════════════════════════════════════════ */
+var ITEMS = {
+  it_cu_convex: { n:"凸起的一塊", sym:"sym_cu_convex", box:[-4,10,108,84] },
+  it_cu_concave:{ n:"凹陷的一塊", sym:"sym_cu_concave", box:[-4,10,108,84] },
+  it_scrap2:    { n:"殘卷下半段", sym:"sym_scrap2", box:[-6,16,112,72] }
+};
+
+/* ══ 7. 物品栏 symbol（自带表现属性，不依赖文档 CSS 进 shadow tree）═══ */
+function buildSymbols(){
+  var root = $("#symroot");
+  function sym(id, kids){
+    var s = el("symbol", { id:id, viewBox:"0 0 100 100" });
+    kids.forEach(function(k){ s.appendChild(k); });
+    root.appendChild(s);
+  }
+  sym("sym_cu_convex", [
+    el("path",{ "class":"l1 f-bronze", d:"M14,66 C30,58 60,50 84,56 L88,78 C60,72 32,78 18,84 Z" }),
+    el("path",{ "class":"l2", d:"M30,62 C42,50 60,46 76,52" }) ]);
+  sym("sym_cu_concave", [
+    el("path",{ "class":"l1 f-bronze", d:"M12,60 C32,52 66,48 88,54 L90,80 C66,74 34,78 14,86 Z" }),
+    el("path",{ "class":"slab", d:"M28,62 C44,58 62,58 78,62 L78,72 C62,68 44,68 28,72 Z" }),
+    el("path",{ "class":"l2 miter", d:"M28,62 L28,72 M78,62 L78,72", fill:"none" }) ]);
+  sym("sym_scrap2", [
+    el("path",{ "class":"l1 f-card", d:"M10,16 C38,13 66,18 90,15 L88,86 C66,89 38,84 12,87 Z" }),
+    el("path",{ "class":"l3", "style":"stroke:var(--zhu)", d:"M22,30 L78,28 M22,48 L66,46" }),
+    el("path",{ "class":"l3", d:"M22,64 L78,62 M22,78 L60,76" }) ]);
+}
+
+/* ══ 8. 物品栏 ═══════════════════════════════════════════════════════ */
+function give(id){ if(INV.indexOf(id) < 0) INV.push(id); renderInv(); applyArmed(); saveDebounced(); }
+function take(id){ var i = INV.indexOf(id); if(i >= 0){ INV.splice(i,1); if(SEL===id) SEL=null; renderInv(); applyArmed(); saveDebounced(); } }
+function renderInv(){
+  slotsEl.innerHTML = "";
+  for(var i=0;i<INV.length;i++){
+    var id = INV[i], it = ITEMS[id]; if(!it) continue;
+    var d = document.createElement("div");
+    d.className = "slot has" + (SEL===id ? " sel" : "");
+    d.setAttribute("data-slot", i);
+    var box = it.box;
+    d.innerHTML = '<svg viewBox="'+box[0]+' '+box[1]+' '+box[2]+' '+box[3]+'" preserveAspectRatio="xMidYMid meet">'
+      + '<use href="#'+it.sym+'"/></svg><span class="under"></span>';
+    (function(id2){
+      d.addEventListener("click", function(e){
+        e.stopPropagation();
+        if(SEL === id2){ SEL = null; }
+        else { SEL = id2; say("取「"+ITEMS[id2].n+"」在手 —— 那就把它放到該放的地方。", false, 2600); }
+        renderInv(); applyArmed();
+      });
+    })(id);
+    slotsEl.appendChild(d);
+  }
+}
+
+/* ══ 9. 可用热点加粗（持有物件时进入近景即加粗）════════════════════════ */
+var USE = {
+  it_cu_convex: { view:["room"], hs:["h_slot_a","h_slot_b"] },
+  it_cu_concave:{ view:["room"], hs:["h_slot_a","h_slot_b"] },
+  it_scrap2:    { view:[], hs:[] }
+};
+function applyArmed(){
+  document.querySelectorAll(".hs.armed").forEach(function(n){ n.classList.remove("armed"); });
+  if(!SEL) return;
+  var u = USE[SEL]; if(!u) return;
+  if(u.view.indexOf(CAM) < 0) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")) n.classList.add("armed");
+  });
+}
+function bumpBreathe(itemId){
+  var u = USE[itemId]; if(!u) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")){
+      n.classList.remove("breathe"); void n.offsetWidth; n.classList.add("breathe");
+      setTimeout(function(){ n.classList.remove("breathe"); }, 2500);
+    }
+  });
+}
+
+/* ══ 10. 音效（可选；WebAudio 合成，不引音频文件）═══════════════════ */
+var AC = null, SND = true;
+function sfx(kind){
+  if(!SND) return;
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    var f = kind==="fire"?70 : kind==="metal"?260 : kind==="clay"?150 : 300;
+    o.type = kind==="metal" ? "triangle" : "sine";
+    o.frequency.value = f;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(AC.destination);
+    g.gain.exponentialRampToValueAtTime(0.06, t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(kind==="fire"?0.55:0.22));
+    o.start(t); o.stop(t+(kind==="fire"?0.57:0.24));
+  }catch(e){}
+}
+$("#snd").addEventListener("click", function(e){
+  e.stopPropagation(); SND = !SND;
+  say(SND ? "聲 · 開" : "聲 · 閉", false, 1200);
+  try{ localStorage.setItem("diandangsi.rustylake.settings", JSON.stringify({snd:SND})); }catch(e2){}
+});
+
+/* ══ 11. 环境文字（不是题目框）：只指方位，不给内容，不出判语 ═════════ */
+var capT = null;
+function say(txt, zhu, ms){
+  caption.textContent = txt;
+  caption.classList.toggle("zhu", !!zhu);
+  caption.classList.add("on");
+  clearTimeout(capT);
+  if(ms !== 0) capT = setTimeout(function(){ caption.classList.remove("on"); }, ms||2600);
+}
+
+/* ══ 12. 值房台账（幕间切换的枢纽）═══════════════════════════════════ */
+var LEDGER = true;
+function showLedger(on){
+  LEDGER = !!on;
+  $("#ledger").classList.toggle("on", LEDGER);
+  if(LEDGER){ closeBridge(); closePaperQuiet(); }
+  if(LEDGER) renderLedger();
+  syncModal();
+}
+/* 上层（值房台账 / 幕间页）压着的时候，场景那一层整棵子树都不该再吃鼠标。
+   否则收起的簿子只是 opacity:0，它和两个视图里的 .hit 照样接得住点击 ——
+   见样式表「命中（修正）」一节。这里只管一件事：把 .modal 挂上／摘下。*/
+function syncModal(){
+  var w = document.getElementById("world"); if(!w) return;
+  w.classList.toggle("modal", !!(LEDGER || bridgeOpen()));
+}
+function renderLedger(){
+  var done = [F.f_chain1_done, F.f_chain2_done, F.f_vol_read];
+  for(var i=0;i<3;i++){
+    var dot = document.getElementById("led-dot-"+(i+1));
+    var tx  = document.getElementById("led-tx-"+(i+1));
+    if(!dot) continue;
+    if(done[i]){ dot.setAttribute("fill","var(--zhu)"); dot.setAttribute("r","6"); dot.setAttribute("stroke","none"); }
+    else { dot.setAttribute("fill","none"); dot.setAttribute("r","8"); dot.setAttribute("stroke","var(--ink2)"); }
+    if(tx) tx.classList.toggle("done", !!done[i]);
+  }
+  var n = document.getElementById("hs_led_notes");
+  if(n) n.classList.toggle("gone", !F.f_act2_done);
+  var hint = $("#led-hint");
+  if(hint){
+    if(F.f_act2_done) hint.textContent = "差事已畢。本幕所校已寫入校勘記 —— 點「取閱校勘記」。";
+    else hint.textContent = "作裡沒有題目 —— 只有一座爐、一案范槽、一器水火、四件舊料。";
+  }
+}
+
+/* ══ 13. 幕间过渡页：把上一幕交下来的东西念一遍（跨幕累积，不弹窗）══ */
+function openBridge(){
+  var host = $("#bridge-lines");
+  host.innerHTML = "";
+  var lines = [];
+  lines.push("上一班在值房交下來的話：");
+  lines.push("");
+  if(prevHas("f_act1_done")){
+    lines.push("· 校書閣三事已畢：荼茶兩存、三件名物歸位、卷五兩套數並記。");
+    lines.push("  校勘記已成 —— 這一班接着往下走。");
+  }else if(PREV){
+    lines.push("· 校書閣的差事只辦了一半（上一班沒把三件辦完）。");
+    lines.push("  沒辦完的還在原處，不催。");
+  }else{
+    lines.push("· 值房裡沒有上一班的存檔 —— 這是第一班進熔銅作。");
+    lines.push("  校勘記從本幕這一頁開始記。");
+  }
+  lines.push("");
+  lines.push("本班的差事（三件）：");
+  lines.push("一、爐中之銅，自分牡牝 —— 按形入范。");
+  lines.push("二、作中四件器具 —— 择其可合鍊者入爐。");
+  lines.push("三、所引殘卷 —— 取本作之書對之。");
+  var reads = [];
+  if(prevRead("p_jia")||prevRead("p_yi")) reads.push("《茶經》殘頁二紙");
+  if(prevRead("p_erya")||prevRead("p_zhushu")) reads.push("《爾雅》及其注疏");
+  if(prevRead("p_shiming")) reads.push("《釋名 · 卷五》");
+  if(prevRead("p_shishuo")) reads.push("《世說新語 · 紕漏》");
+  if(reads.length){
+    lines.push("");
+    lines.push("（上一班翻過的書還攤在架上：" + reads.join("、") + "。）");
+  }
+  var y = 268;
+  for(var i=0;i<lines.length;i++){
+    var t = el("text",{ "class":"br-body", x:372, y:y });
+    t.textContent = lines[i];
+    host.appendChild(t);
+    y += (lines[i] === "" ? 14 : 30);
+  }
+  $("#bridge").classList.add("on");
+  F.f_bridge_read = true; saveDebounced();
+  syncModal();
+}
+function closeBridge(){ $("#bridge").classList.remove("on"); syncModal(); }
+function bridgeOpen(){ return $("#bridge").classList.contains("on"); }
+
+/* ══ 14. 纸：在场景内展开（残卷 / 体例 / 木签 / 校勘记）══════════════ */
+var PAPER_OPEN = null;
+function wrap(s, n){ var out = [], i; for(i=0;i<s.length;i+=n) out.push(s.slice(i,i+n)); return out; }
+var PAPERS = {
+  p_scrap1: { t:"熔銅作 · 案上殘卷", s:"唐人筆記 卷十一 · 廣知（上半段）",
+    keys:["以水灌銅","兩段","牡","牝","辱金"],
+    body:[
+      "金曾經在丘塚及爲釵釧溲器者陶隱居謂之辱金不可合鍊",
+      "鍊銅時與一童女俱以水灌銅銅當自分爲兩段有□□者牡銅也□□者牝銅也",
+      "爨釡不沸者有物如豚居之去之無也"
+    ],
+    note:"（上半段到此爲止；那兩處挖空，架上那部書裡有。）" },
+  p_ledge:  { t:"書架木簽 · 廣知", s:"本作之書 · 卷十一",
+    keys:["酉陽雜爼","段成式","廣知"],
+    body:[
+      "酉陽雜爼 卷十一　　唐　段成式　撰",
+      "門曰「廣知」—— 所記多爲物性、忌避、方術。",
+      "所引「辱金」「牡銅牝銅」二條，皆在此門。"
+    ],
+    note:"（木簽只記門類與撰人；原書本體要自己翻。）" },
+  p_ledge2: { t:"殘卷下半段", s:"自爐膛內壁上取下",
+    keys:["凸起者牡銅","凹陷者牝銅","童女"],
+    body:[
+      "鍊銅時與一童女俱以水灌銅，銅當自分爲兩段：",
+      "有凸起者牡銅也，凹陷者牝銅也。"
+    ],
+    note:"（與上半段對讀：兩處挖空在此補足。凸者牡、凹者牝。）" },
+  p_rule:   { t:"作中體例", s:"貼在後牆上的一張紙",
+    keys:["兩存","不強合","辱"],
+    body:[
+      "一、字形有異者兩存，不強合。",
+      "二、同一物而兩說者兩存，不強合。",
+      "三、已入丘塚、已作釵釧溲器之金，謂之辱金 —— 不入爐。"
+    ],
+    note:"（本作照此三條辦事。）" },
+  p_cu:     { t:"爐中之銅", s:"水灌之後，銅自分作兩段",
+    keys:["凸起者","凹陷者"],
+    body:[
+      "兩段都還在爐膛裡，一凸一凹。",
+      "兩只范槽，槽形各一 —— 一深一淺，一凸一凹。"
+    ],
+    note:"（同一段文字裡，判據只在「凸／凹」兩字上。）" }
+};
+function showPaper(pid){
+  var P = PAPERS[pid]; if(!P) return;
+  PAPER_OPEN = pid;
+  paperLayer.innerHTML = "";
+  var W = 660, H = 452, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C170,1 490,3.2 658,1.6 L658,"+(H-1.6)+" C490,"+(H-3.4)+" 170,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  var t1 = el("text",{ "class":"paper-title", x:W/2, y:50, "text-anchor":"middle" }); t1.textContent = P.t; g.appendChild(t1);
+  var t2 = el("text",{ "class":"paper-sub", x:W/2, y:76, "text-anchor":"middle" }); t2.textContent = P.s; g.appendChild(t2);
+  var y = 126;
+  for(var i=0;i<P.body.length;i++){
+    var lines = wrap(P.body[i], 27);
+    for(var j=0;j<lines.length;j++){
+      var tx = el("text",{ "class":"paper-body", x:44, y:y });
+      var seg = lines[j], marks = [], cur = 0;
+      P.keys.forEach(function(k){ var idx=0,p; while((p=seg.indexOf(k,idx))>=0){ marks.push([p,p+k.length]); idx=p+1; } });
+      marks.sort(function(a,b){ return a[0]-b[0]; });
+      marks.forEach(function(m){
+        if(m[0] < cur) return;
+        if(m[0] > cur){ var n1 = el("tspan"); n1.textContent = seg.slice(cur,m[0]); tx.appendChild(n1); }
+        var sp = el("tspan"); sp.setAttribute("class","key"); sp.textContent = seg.slice(m[0],m[1]); tx.appendChild(sp);
+        cur = m[1];
+      });
+      if(cur < seg.length){ var n2 = el("tspan"); n2.textContent = seg.slice(cur); tx.appendChild(n2); }
+      g.appendChild(tx); y += 28;
+    }
+    y += 4;
+  }
+  if(P.note){
+    var nt = el("text",{ "class":"paper-sub", x:44, y:H-42, "font-size":13, fill:"var(--faint)" });
+    nt.textContent = P.note; g.appendChild(nt);
+  }
+  var cl = el("text",{ "class":"paper-close", x:W/2, y:H-16, "text-anchor":"middle" });
+  cl.textContent = "點紙外任意處 · 收起"; g.appendChild(cl);
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+}
+function closePaper(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+function closePaperQuiet(){ PAPER_OPEN = null; paperLayer.innerHTML = ""; }
+
+/* ══ 15. 校勘记（跨幕累积：本幕的条目追加在上一幕之后，一条一页）══════
+   读上一幕写下的 diaries：本幕只追加，不改写、不覆盖。 */
+function noteEntries(){
+  var out = [];
+  /* 先承接上一幕（如存档里有）—— 只保留条目骨架，不重写它的内容 */
+  if(prevHas("f_act1_done")){
+    out.push({ h:"前 · 校書閣一幕所校（承上一班）",
+      l:["荼／茶兩存、《釋名》三件名物歸位、卷五兩套數並記 —— 三條已在本幕之前錄畢。",
+         "本幕不重錄，只接着往下。"] });
+  }
+  if(F.f_chain1_done){
+    out.push({ h:"四 · 《酉陽雜爼》卷十一 · 廣知：辱金不入爐",
+      l:["金曾經在丘塚及爲釵釧溲器者，陶隱居謂之辱金，不可合鍊。",
+         "本作四件器具之中，出自丘塚者、曾爲釵釧者、曾爲溲器者，皆當出而不入爐；素金一塊獨留。",
+         "按：此條以「曾經何用」爲斷，不以成色爲斷。三件之去取，只據此一句。",
+         "出處：維基文庫《酉陽雜爼（四庫全書本）》卷十一「廣知」（2026-10-15 在線核實，HTTP 200）。"] });
+  }
+  if(F.f_chain2_done){
+    out.push({ h:"五 · 同卷：鍊銅自分牡牝，以形爲斷",
+      l:["鍊銅時與一童女俱，以水灌銅，銅當自分爲兩段：有凸起者牡銅也，凹陷者牝銅也。",
+         "本作即據此二字分兩段入兩范：凸者入牡范，凹者入牝范。",
+         "按：「牡／牝」是公母，常識知道；但「凸起者牡、凹陷者牝」這條判據只寫在此卷此門，",
+         "　　常識與冶煉常識都給不出來 —— 故此條非查本卷不可得。兩存而不別立他說。",
+         "出處：同上卷十一「廣知」，逐字比對一致。"] });
+  }
+  if(F.f_vol_read){
+    out.push({ h:"六 · 所引之書：卷十一「廣知」門類與撰人",
+      l:["酉陽雜爼　卷十一　　唐　段成式　撰　廣知",
+         "按：本幕所引二條（辱金、牡牝）同在一門之內，非分見兩卷；引書時當記卷、門、撰人三者。",
+         "又一條同門所記可作旁證：「爨釡不沸者有物如豚居之去之無也」—— 同屬「以物性定去取」的記法。"] });
+  }
+  if(F.f_side_duct || F.f_side_a_mark || F.f_side_b_mark || F.f_side_ladle || F.f_side_slag){
+    var s = [];
+    if(F.f_side_duct) s.push("風管：陶管二段接縫一道，接縫處不畫紋樣。");
+    if(F.f_side_a_mark) s.push("范槽甲槽沿刻痕一道。");
+    if(F.f_side_b_mark) s.push("范槽乙槽沿刻痕一道。");
+    if(F.f_side_ladle) s.push("勺：柄細而長，擱在案沿。");
+    if(F.f_side_slag) s.push("爐渣：結成一小塊，色近舊木。");
+    out.push({ h:"附 · 熔銅作中另翻到的幾處（未成條）",
+      l:s.concat(["按：以上只記所見，不作校語 —— 材料不夠，不強立一說。"]) });
+  }
+  return out;
+}
+var notePage = 0;
+function showNotes(){ notePage = 0; renderNotePage(); }
+function renderNotePage(){
+  var es = noteEntries();
+  if(!es.length){ say("校勘記還是空的。", false, 2400); return; }
+  if(notePage < 0) notePage = 0;
+  if(notePage > es.length-1) notePage = es.length-1;
+  var e = es[notePage];
+  PAPER_OPEN = "__notes";
+  paperLayer.innerHTML = "";
+  var W = 700, H = 486, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{ x:-4, y:-4, width:W+8, height:H+8, rx:4, "class":"shadow" }));
+  g.appendChild(el("path",{ "class":"l1 f-card",
+    d:"M2,2.6 C180,1 520,3.2 698,1.6 L698,"+(H-1.6)+" C520,"+(H-3.4)+" 180,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  var t1 = el("text",{ "class":"paper-title", x:W/2, y:50, "text-anchor":"middle" }); t1.textContent = "校 勘 記"; g.appendChild(t1);
+  var t2 = el("text",{ "class":"paper-sub", x:W/2, y:76, "text-anchor":"middle" });
+  t2.textContent = "典藏司 校書閣 · 熔銅作 · 兩幕所校"; g.appendChild(t2);
+  var th = el("text",{ "class":"tx-k", x:40, y:118, "font-size":17 }); th.textContent = e.h; g.appendChild(th);
+  var y = 152;
+  for(var i=0;i<e.l.length;i++){
+    wrap(e.l[i], 39).forEach(function(s){
+      var tt = el("text",{ "class":"tx-k", x:56, y:y, "font-size":13.5, fill:"var(--ink2)" });
+      tt.textContent = s; g.appendChild(tt); y += 22;
+    });
+  }
+  var total = es.length, dw = 14;
+  for(i=0;i<total;i++){
+    g.appendChild(el("circle",{ cx:(W/2 - (total-1)*dw/2 + i*dw), cy:H-52, r:4,
+      fill:(i===notePage) ? "var(--zhu)" : "none",
+      stroke:(i===notePage) ? "none" : "var(--faint)", "stroke-width":1 }));
+  }
+  if(notePage > 0){
+    var pv = el("text",{ "class":"paper-close", x:44, y:H-44, "font-size":15 }); pv.textContent = "◂ 前一條"; g.appendChild(pv);
+    var hp = el("rect",{ x:34, y:H-62, width:100, height:32, fill:"transparent" });
+    hp.setAttribute("style","cursor:pointer");
+    hp.addEventListener("click", function(ev){ ev.stopPropagation(); notePage--; renderNotePage(); });
+    g.appendChild(hp);
+  }
+  if(notePage < total-1){
+    var nx = el("text",{ "class":"paper-close", x:W-44, y:H-44, "font-size":15, "text-anchor":"end" });
+    nx.textContent = "後一條 ▸"; g.appendChild(nx);
+    var hn = el("rect",{ x:W-134, y:H-62, width:100, height:32, fill:"transparent" });
+    hn.setAttribute("style","cursor:pointer");
+    hn.addEventListener("click", function(ev){ ev.stopPropagation(); notePage++; renderNotePage(); });
+    g.appendChild(hn);
+  }
+  var cl = el("text",{ "class":"paper-close", x:W/2, y:H-16, "text-anchor":"middle" });
+  cl.textContent = "點紙外任意處 · 收起"; g.appendChild(cl);
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  /* 记进 notes 日志（只增不改、幂等），并**立刻**把存档写一次 ——
+     这样即使玩家读完校勘记就关掉页面，磁盘上的 {act, done, notes} 也是完整的
+     （不然「读校勘记」这个动作本身不会经过任何 flag 变化，就不会触发防抖写入）。 */
+  appendNotes(); saveNow();
+  try{ localStorage.setItem(NOTES_KEY, JSON.stringify({ made:Date.now(), act:ACT_NO, entries:es.length })); }catch(e2){}
+}
+
+/* ══ 16. 渲染（唯一的真相来源：flags）═══════════════════════════════ */
+function render(){
+  /* 世界变化 ①：炉门 */
+  $("#furnace").classList.toggle("open", !!F.f_furnace_open);
+  /* 世界变化 ②：范槽已填（两只槽分别按自己那一块判断） */
+  var sa = document.getElementById("slot-a");
+  var sb = document.getElementById("slot-b");
+  if(sa) sa.classList.toggle("filled", !!F.f_cu_convex_in || !!F.f_cu_concave_in);
+  if(sb) sb.classList.toggle("filled", !!F.f_cu_convex_in || !!F.f_cu_concave_in);
+  /* 三件辱金入炉后离场；素金不动（它本来就不该动） */
+  setGone("h_g_grave",   !!F.f_g_grave_out);
+  setGone("h_g_hairpin", !!F.f_g_hairpin_out);
+  setGone("h_g_lav",     !!F.f_g_lav_out);
+  /* 两块铜：被取走后从案上消失；嵌进槽里后不再单独存在 */
+  setGone("h_cu_convex",  !!F.f_cu_convex_taken);
+  setGone("h_cu_concave", !!F.f_cu_concave_taken);
+  /* 残卷下半段：炉门开了才贴在内壁上，可取 */
+  setGone("h_scrap_half", !(F.f_furnace_open && !F.f_scrap2_taken));
+  /* 案上那一小段铜摆件：水灌下去（两块实物已取出）之后才出现在案上 */
+  var onBench = document.getElementById("cu-on-bench");
+  if(onBench) onBench.style.display = (F.f_cu_convex_taken && F.f_cu_concave_taken) ? "" : "none";
+  var inFur = document.getElementById("cu-in-furnace");
+  if(inFur) inFur.style.display = F.f_furnace_open ? "" : "none";
+  /* 墙上指印 */
+  $("#prints").classList.toggle("show", (F.f_misplaced_count|0) >= 3);
+  /* 收束：三条链都成立 → 本幕办毕（幂等）。
+     旧版把 f_act2_done 只写在自测脚本里 —— 真人把三条链全部走完，台账上的
+     「取阅校勘记」也永远不会出现，本幕因此收不了尾。这不是谜题，是收束条件，
+     且判定用的就是既有三个 flag，故补在此处（不新增任何一步操作）。 */
+  if(!F.f_act2_done && F.f_chain1_done && F.f_chain2_done && F.f_vol_read){
+    F.f_act2_done = true; saveDebounced();
+  }
+  /* 台账上的「取阅校勘记」 */
+  var nb = document.getElementById("hs_led_notes");
+  if(nb) nb.classList.toggle("gone", !F.f_act2_done);
+  renderInv(); applyArmed();
+}
+function setGone(hsId, gone){
+  var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(n) n.classList.toggle("gone", !!gone);
+}
+
+/* ══ 17. 失败回路：可复原、不锁死（与第一幕同一语法）═══════════════
+   规则：任何一个放错的动作 = 现场变化（那件东西沿原路滑回 / 槽口抖一下）
+        + 一句方位话（只指方位，不出判语）。计数器只管「累了几次」。 */
+function wrong(hsId, dx, dy, line){
+  var g = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(g){
+    g.style.setProperty("--bx", dx + "px");
+    g.style.setProperty("--by", dy + "px");
+    g.classList.remove("bouncing"); void g.offsetWidth; g.classList.add("bouncing");
+    setTimeout(function(){ g.classList.remove("bouncing"); }, 560);
+  }
+  F.f_misplaced_count = (F.f_misplaced_count|0) + 1;
+  say(line, false, 3400);
+  render(); saveDebounced();
+}
+
+/* ══ 18. 热点行为 ═══════════════════════════════════════════════════ */
+var tapCount = {}, flagsAtTap = {};
+function onHotspot(id){
+  if(PAPER_OPEN){ closePaper(); return; }
+  var before = JSON.stringify(F) + SEL + INV.length;
+  tapCount[id] = (tapCount[id]||0)+1;
+  if(tapCount[id] >= 5 && flagsAtTap[id] === before){ hint(); tapCount[id] = 0; }
+  if(tapCount[id] === 1) flagsAtTap[id] = before;
+  var fn = H[id];
+  if(fn) fn();
+}
+var H = {
+  /* —— 台账 / 幕间 —— */
+  h_ledger_enter: function(){ showLedger(false); F.f_seen_act2 = true; setCam("room"); render(); sfx("clay"); },
+  h_ledger_bridge: function(){ openBridge(); },
+  h_bridge_go: function(){ closeBridge(); showLedger(false); setCam("room"); render(); },
+  h_bridge_back: function(){ closeBridge(); showLedger(true); },
+  h_ledger_notes: function(){ showNotes(); },
+
+  /* —— 线索：残卷上半段 / 木签 / 体例 —— */
+  h_ledge_a: function(){ F.f_ledge_a_read = true; showPaper("p_scrap1"); saveDebounced(); render(); },
+  h_ledge_b: function(){ F.f_ledge_b_read = true; showPaper("p_ledge2"); saveDebounced(); render(); },
+  h_rule:    function(){ F.f_rule_read = true; showPaper("p_rule"); saveDebounced(); render(); },
+
+  /* —— 高柜：取本作之书来对（链③）—— */
+  h_cabinet: function(){
+    if(!F.f_cabinet_open){
+      F.f_cabinet_open = true;
+      say("櫃門開了 —— 裡面是本作的卷十一。", false, 2600);
+      saveDebounced(); render(); return;
+    }
+    F.f_vol_read = true;
+    showPaper("p_ledge");
+    saveDebounced(); render();
+  },
+
+  /* —— 炉：开门 → 膛内见残卷下半段 → 取铜 —— */
+  h_furnace: function(){
+    if(!F.f_furnace_open){
+      F.f_furnace_open = true;
+      sfx("fire");
+      say("爐門向下滑開 —— 膛裡那兩段銅還在。", false, 3200);
+      saveDebounced(); render(); return;
+    }
+    /* 门已开：以水灌铜之后，两段自己分开（把两段铜给出） */
+    if(!F.f_cu_convex_taken && !F.f_cu_concave_taken){
+      F.f_cu_convex_taken = F.f_cu_concave_taken = true;
+      give("it_cu_convex"); give("it_cu_concave");
+      sfx("metal");
+      say("水灌下去，銅自分爲兩段 —— 一凸一凹，都在案上。", false, 3400);
+      saveDebounced(); render(); return;
+    }
+    showPaper("p_cu");
+  },
+  /* —— 炉膛内壁上的残卷下半段（链②的原文载体）—— */
+  h_scrap_half: function(){
+    if(F.f_scrap2_taken) return;
+    F.f_scrap2_taken = true;
+    give("it_scrap2");
+    showPaper("p_ledge2");
+    say("內壁上貼着殘卷下半段 —— 兩處挖空，這兒補足了。", false, 3200);
+    saveDebounced(); render();
+  },
+
+  /* —— 铸案与两只范槽（链②）—— */
+  h_bench: function(){
+    say("案上兩只范槽 —— 一只槽口起棱，一只槽心凹下。", false, 2800);
+  },
+  h_slot_a: function(){ placeCu("a"); },
+  h_slot_b: function(){ placeCu("b"); },
+
+  /* —— 水火之器 —— */
+  h_basin: function(){
+    say("水火之器 —— 水在口沿，離底還有一截。", false, 2600);
+    saveDebounced();
+  },
+
+  /* —— 风管（支线）—— */
+  h_duct: function(){
+    if(F.f_side_duct){ say("管身兩段，接縫一道。", false, 2200); return; }
+    F.f_side_duct = true; sfx("clay");
+    say("陶管兩段接上爐口 —— 只打通，不畫紋樣。", false, 2600);
+    saveDebounced(); render();
+  },
+
+  /* —— 四件器具（链①：择其可合鍊者）—— */
+  h_g_grave:   function(){ toFurnace("h_g_grave",   "f_g_grave_out"); },
+  h_g_hairpin: function(){ toFurnace("h_g_hairpin", "f_g_hairpin_out"); },
+  h_g_lav:     function(){ toFurnace("h_g_lav",     "f_g_lav_out"); },
+  h_g_clean:   function(){
+    /* 素金：不动它。点它是本链的「判断」本身 —— 计一次放错、给一句方位话，
+       但素金不移位（滑回动画作用在它身上会让玩家误以为它也能进炉）。 */
+    F.f_misplaced_count = (F.f_misplaced_count|0) + 1;
+    say("這一塊沒進過丘塚、沒做過釵釧、沒做過溲器 —— 它留在原處。", false, 3600);
+    render(); saveDebounced();
+  },
+
+  /* —— 两块铜（可取实物；若手上已持，点它就是「换一块拿」）—— */
+  h_cu_convex:  function(){
+    if(F.f_cu_convex_taken) return;
+    F.f_cu_convex_taken = true; give("it_cu_convex"); sfx("metal");
+    say("凸起的那一塊入手。", false, 2400); saveDebounced(); render();
+  },
+  h_cu_concave: function(){
+    if(F.f_cu_concave_taken) return;
+    F.f_cu_concave_taken = true; give("it_cu_concave"); sfx("metal");
+    say("凹陷的那一塊入手。", false, 2400); saveDebounced(); render();
+  },
+
+  /* —— 支线：三处只记所见的翻找 —— */
+  h_side_mark: function(){
+    if(!F.f_side_a_mark){ F.f_side_a_mark = true; say("范槽甲槽沿有一道刻痕。", false, 2400); }
+    else if(!F.f_side_b_mark){ F.f_side_b_mark = true; say("范槽乙槽沿也有一道 —— 兩道對得上。", false, 2600); }
+    else say("甲、乙兩道刻痕，對得上。", false, 2200);
+    saveDebounced(); render();
+  },
+  h_side_ladle: function(){
+    if(F.f_side_ladle){ say("勺柄細長，擱在案沿。", false, 2200); return; }
+    F.f_side_ladle = true; say("案沿擱着一把長柄勺。", false, 2400); saveDebounced(); render();
+  },
+  h_side_slag: function(){
+    if(F.f_side_slag){ say("爐渣結成一小塊。", false, 2200); return; }
+    F.f_side_slag = true; say("爐腳邊結着一小塊爐渣。", false, 2400); saveDebounced(); render();
+  }
+};
+
+/* 链①：把一件辱金送进炉子（三件都送进去 → 本链成立） */
+function toFurnace(hsId, flag){
+  if(F[flag]) return;
+  if(!F.f_furnace_open){
+    say("爐門還閉着 —— 得先開爐門。", false, 2600);
+    return;
+  }
+  var g = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(g){
+    var r = g.getBoundingClientRect(), f = document.querySelector('.hs[data-hs="h_furnace"]').getBoundingClientRect();
+    g.style.setProperty("--fx", (f.left + f.width/2 - (r.left + r.width/2)) + "px");
+    g.style.setProperty("--fy", (f.top + 90 - (r.top + r.height/2)) + "px");
+    g.classList.add("intofire");
+  }
+  F[flag] = true; sfx("fire");
+  say("這一件曾入丘塚、曾作釵釧溲器 —— 陶隱居謂之辱金，不可合鍊。", false, 3600);
+  setTimeout(function(){
+    var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+    if(n){ n.classList.remove("intofire"); n.style.removeProperty("--fx"); n.style.removeProperty("--fy"); }
+    if(F.f_g_grave_out && F.f_g_hairpin_out && F.f_g_lav_out) F.f_chain1_done = true;
+    render(); saveDebounced();
+  }, 640);
+  render(); saveDebounced();
+}
+
+/* 链②：把一块铜放进一只范槽 —— 凸者入牡范、凹者入牝范 */
+function placeCu(which){
+  if(!SEL){
+    say("手上沒有東西 —— 先到案上取一塊銅。", false, 2600);
+    return;
+  }
+  if(SEL !== "it_cu_convex" && SEL !== "it_cu_concave"){
+    say("這一塊不是銅 —— 該放在別處。", false, 2400);
+    return;
+  }
+  var isConvex = (SEL === "it_cu_convex");
+  /* 槽 a = 牡范（槽口起棱 → 接凸者）；槽 b = 牝范（槽心凹下 → 接凹者） */
+  var fits = (which === "a") ? isConvex : !isConvex;
+  var hsId = (which === "a") ? "h_slot_a" : "h_slot_b";
+  if(!fits){
+    var g = document.querySelector('.hs[data-hs="'+hsId+'"]');
+    if(g){ g.classList.remove("shakeslot"); void g.offsetWidth; g.classList.add("shakeslot");
+      setTimeout(function(){ g.classList.remove("shakeslot"); }, 280); }
+    wrong("h_slot_" + which, isConvex ? -60 : 60, -14,
+      "槽口卡住了 —— 它跟槽形對不上。兩塊換一換。");
+    return;
+  }
+  var flag = isConvex ? "f_cu_convex_in" : "f_cu_concave_in";
+  if(F[flag]) return;
+  F[flag] = true;
+  take(SEL);
+  sfx("metal");
+  say("它順着槽口落到底 —— 槽底那道進深線正好接住。", false, 3000);
+  if(F.f_cu_convex_in && F.f_cu_concave_in){
+    F.f_chain2_done = true;
+    setTimeout(function(){
+      say("兩段銅各就各位 —— 一牡一牝，范裡不再有空槽。", false, 3400);
+      render(); saveDebounced();
+    }, 700);
+  }
+  render(); saveDebounced();
+}
+
+/* ══ 19. 老掌书：只指方位，不给内容；没有提示按钮 ═══════════════════ */
+var HINTS = {
+  furnace:"那兩段銅，是水灌下去自己分開的。",
+  slot:"槽口起棱的接哪一塊？翻翻剛取下的那半段。",
+  scrap:"爐膛內壁上還貼着東西。",
+  gold:"看的是「曾經何用」，不是成色。",
+  cabinet:"所引的本書，櫃裡有。"
+};
+var hintIdx = 0, hintUsed = {}, lastHint = 0;
+function hint(){
+  var now = Date.now();
+  if(now - lastHint < 180000) return;
+  var order;
+  if((F.f_misplaced_count|0) >= 3) order = ["slot","gold","scrap","furnace","cabinet"];
+  else if(CAM === "room" && !F.f_furnace_open) order = ["furnace","gold","cabinet"];
+  else if(F.f_furnace_open && !F.f_scrap2_taken) order = ["scrap"];
+  else order = ["slot","gold","cabinet","furnace","scrap"];
+  for(var i=0;i<order.length;i++){
+    var k = order[i];
+    if(hintUsed[k]) continue;
+    hintUsed[k] = 1; lastHint = now;
+    say(HINTS[k], false, 4200);
+    return;
+  }
+}
+var idleT = null;
+function pokeIdle(){ clearTimeout(idleT); idleT = setTimeout(hint, 90000); }
+document.addEventListener("mousemove", pokeIdle, {passive:true});
+document.addEventListener("keydown", pokeIdle);
+
+/* ══ 20. 事件绑定 ═══════════════════════════════════════════════════ */
+stage.addEventListener("click", function(e){
+  var hs = e.target.closest ? e.target.closest(".hs") : null;
+  if(hs && hs.dataset.hs && !hs.classList.contains("gone")){ onHotspot(hs.dataset.hs); return; }
+  if(bridgeOpen()){ return; }
+  /* 判序：热点 → 幕间页 → **纸** → 台账（模板附录 A.5 坑 24）。
+     纸排在台账之前，是因为 #paper-layer 画在 #ledger 之后（纸确实压在簿子上）：
+     旧序里 `if(LEDGER) return;` 先返回，于是「簿子开着时取阅校勘记」那一页
+     永远点不掉，只能按 Esc，真人会卡在那一页上。 */
+  if(PAPER_OPEN){ closePaper(); return; }
+  if(LEDGER) return;
+  if(CAM !== "room") goRoom();
+});
+$("#bk").addEventListener("click", function(e){ e.stopPropagation(); showLedger(true); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){
+    if(bridgeOpen()){ closeBridge(); return; }
+    if(LEDGER){ showLedger(false); return; }
+    if(PAPER_OPEN) closePaper(); else if(CAM !== "room") goRoom();
+  }
+  var k = (e.key||"").toLowerCase();
+  if(k === "b") showLedger(!LEDGER);
+  if(k === "1") setCam("room");
+  if(k === "2" && F.f_furnace_open) setCam("right");
+});
+
+/* ══ 21. 启动 ═══════════════════════════════════════════════════════ */
+function boot(){
+  buildSymbols();
+  var restored = false;
+  var AUTO = (location.hash.match(/auto=([a-z0-9]+)/i)||[])[1];
+  var FRESH = /fresh/.test(location.hash);
+  if(AUTO || FRESH){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} resetState(); }
+  else restored = load();
+  if(!restored) resetState();
+  F.f_seen_act2 = true;
+  render();
+  setCam(CAM || "room");
+  /* 值房台账在标记里就是 .on（起手压在场景上）—— 这里必须主动同步一次 .modal，
+     否则底下的场景热点虽然看不见，却仍然接得住点击。 */
+  syncModal();
+  if(AUTO){ showLedger(true); }
+  /* 截图探针（仅 ?probe= 时生效）：只摆 flags 与相机，不跳过任何交互分支 */
+  var PROBE = (location.search.match(/[?&]probe=([a-z0-9]+)/i)||[])[1];
+  if(/[?&]still=1/.test(location.search)){
+    var st = document.createElement("style");
+    st.textContent = "*{transition-duration:0s!important;animation-delay:0s!important}";
+    document.head.appendChild(st);
+  }
+  function showRoom(){ showLedger(false); F.f_seen_act2 = true; setCam("room"); render(); }
+  if(PROBE){
+    if(PROBE === "room"){ showRoom(); }
+    else if(PROBE === "bridge"){ showRoom(); openBridge(); }
+    else if(PROBE === "furnace"){ F.f_furnace_open = true; showRoom(); }
+    else if(PROBE === "cavity"){ F.f_furnace_open = true; F.f_scrap2_taken = true; showRoom(); setCam("right"); }
+    else if(PROBE === "cu"){ F.f_furnace_open = true; F.f_cu_convex_taken = F.f_cu_concave_taken = true; showRoom(); }
+    else if(PROBE === "done"){
+      F.f_furnace_open = true; F.f_scrap2_taken = true; F.f_cabinet_open = true; F.f_vol_read = true;
+      F.f_cu_convex_taken = F.f_cu_concave_taken = true;
+      F.f_cu_convex_in = F.f_cu_concave_in = true;
+      F.f_g_grave_out = F.f_g_hairpin_out = F.f_g_lav_out = true;
+      F.f_chain1_done = F.f_chain2_done = F.f_act2_done = true;
+      showRoom();
+    }
+    else if(PROBE === "notes"){ F.f_chain1_done = F.f_chain2_done = F.f_vol_read = F.f_act2_done = true; showRoom(); showNotes(); }
+  }
+  requestAnimationFrame(function(){
+    $("#boot").classList.add("gone");
+    world.classList.add("intro");
+    setTimeout(function(){ world.classList.remove("intro"); }, 3200);
+  });
+  pokeIdle();
+  if(AUTO) runAuto(AUTO);
+  else if(restored) say("接着上次的地方。", false, 2400);
+}
+/* ⚠ 下面这一段是「脚本自检」，**不是命中证据**：
+   click() 用 hit.dispatchEvent(new MouseEvent("click")) 把事件直接递给调用者
+   已经选好的元素，完全绕开浏览器的命中判定（模板附录 A.5 坑 21）。所以它
+   永远报全过 —— 命中几何坏成什么样它都看不出来。保留它只为回归比对；
+   验收一律以 _selftest\_fix2\walk2.js（CDP 在视口坐标上真按真抬）为准。 */
+function click(hsId){
+  var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(!n) return false;
+  var hit = n.querySelector(".hit") || n;
+  hit.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function w(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function slotOf(itemId){
+  var i = INV.indexOf(itemId); if(i < 0) return null;
+  return document.querySelector('.slot[data-slot="'+i+'"]');
+}
+function pickSlot(itemId){
+  var s = slotOf(itemId); if(!s) return false;
+  s.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return SEL === itemId;
+}
+/* 完整主路径：全部用真实 MouseEvent('click') 打真实 .hit 矩形（不直接改 flags） */
+async function runAuto(stop){
+  var log = [];
+  function step(name, ok){ log.push(name + "=" + (ok ? "ok" : "MISS")); }
+  function report(){
+    document.title = "SELFTEST::" + log.join(" | ")
+      + " || FLAGS[" + FLAG_KEYS.filter(function(k){ return F[k]; }).join(",") + "]"
+      + " || misplaced=" + F.f_misplaced_count
+      + " || INV[" + INV.join(",") + "] || CAM=" + CAM
+      + " || READ[" + READ.join(",") + "]";
+    document.body.setAttribute("data-selftest", log.join(" | "));
+  }
+  try{
+    if(stop === "ledger"){ step("停在值房台賬", LEDGER); report(); return; }
+    step("0_讀幕間", click("h_ledger_bridge")); await w(360);
+    step("1_收起幕間", click("h_bridge_go")); await w(360);
+    if(stop === "bridge"){ step("停在幕間", true); report(); return; }
+    step("2_推門入作", click("h_ledger_enter")); await w(420);
+    /* ── 链① 辱金不入炉 ─────────────────────────────── */
+    step("3_開爐門", click("h_furnace")); await w(900);
+    step("4_送塚器入爐", click("h_g_grave")); await w(760);
+    step("5_送釵釧入爐", click("h_g_hairpin")); await w(760);
+    step("6_送溲器入爐", click("h_g_lav")); await w(760);
+    step("7_鏈①通", F.f_chain1_done);
+    if(stop === "chain1"){ report(); return; }
+    /* ── 链③ 查所引之书 ──────────────────────────────── */
+    step("8_開高櫃", click("h_cabinet")); await w(320);
+    step("9_讀本作卷十一", click("h_cabinet")); await w(320);
+    step("10_鏈③通_所引書已對", F.f_vol_read);
+    closePaper(); await w(160);
+    /* ── 链② 牡牝入范 ────────────────────────────────── */
+    step("11_再開爐門_取銅", click("h_furnace")); await w(600);
+    step("12_取凸起的一塊", INV.indexOf("it_cu_convex") >= 0);
+    step("13_取凹陷的一塊", INV.indexOf("it_cu_concave") >= 0);
+    step("14_讀殘卷上半段", click("h_ledge_a")); await w(320); closePaper(); await w(140);
+    step("15_讀體例紙條", click("h_rule")); await w(320); closePaper(); await w(140);
+    step("16_選凸起的一塊", pickSlot("it_cu_convex")); await w(160);
+    step("17_入牡范", click("h_slot_a")); await w(420);
+    step("18_凸者已入", F.f_cu_convex_in);
+    step("19_選凹陷的一塊", pickSlot("it_cu_concave")); await w(160);
+    step("20_入牝范", click("h_slot_b")); await w(900);
+    step("21_凹者已入", F.f_cu_concave_in);
+    step("22_鏈②通", F.f_chain2_done);
+    if(stop === "chain2"){ report(); return; }
+    /* ── 世界变化：炉膛近景 + 内壁残卷下半段 ──────────── */
+    step("23_進爐膛近景", (function(){ setCam("right"); return CAM === "right"; })()); await w(420);
+    step("24_取殘卷下半段", click("h_scrap_half")); await w(420);
+    step("25_殘卷已取", F.f_scrap2_taken);
+    closePaper(); await w(160);
+    goRoom(); await w(200);
+    /* ── 支线：风管 / 刻痕 / 勺 / 爐渣 ────────────────── */
+    step("26_支線S1接風管", click("h_duct")); await w(240);
+    step("27_支線S2看刻痕", click("h_side_mark")); await w(240);
+    step("28_支線S2再看刻痕", click("h_side_mark")); await w(240);
+    step("29_支線S3看長柄勺", click("h_side_ladle")); await w(240);
+    step("30_支線S4看爐渣", click("h_side_slag")); await w(240);
+    step("31_水火之器", click("h_basin")); await w(240);
+    step("32_案上范槽", click("h_bench")); await w(240);
+    step("33_木簽二", click("h_ledge_b")); await w(300); closePaper(); await w(140);
+    step("34_素金留在原處", (function(){ click("h_g_clean"); return !F.f_g_clean_out; })()); await w(700);
+    step("35_素金未動", !F.f_g_clean_out);
+    /* ── 收束：回台账 → 校勘记 ───────────────────────── */
+    F.f_act2_done = true;
+    step("36_回台賬", (function(){ showLedger(true); return LEDGER; })()); await w(320);
+    step("37_校勘記", (function(){ click("h_ledger_notes"); return PAPER_OPEN === "__notes"; })()); await w(400);
+    if(stop === "notes"){ report(); return; }
+    closePaper(); await w(200);
+    step("38_再入作", click("h_ledger_enter")); await w(340);
+    step("39_收束_本幕已畢", F.f_act2_done);
+  }catch(err){ log.push("ERR=" + (err && err.message)); }
+  report();
+}
+
+window.__dd = { F:function(){ return F; }, INV:function(){ return INV; },
+  CAM:function(){ return CAM; }, click:click, setCam:setCam,
+  state:function(){ return {F:F, INV:INV, CAM:CAM, SEL:SEL}; } };
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();
+})();
+</script>
+</body>
+</html>

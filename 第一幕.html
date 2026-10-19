@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>典藏司 · 校書閣 · 第一幕</title>
+<style>
+  /* ══ 色板：现有成品 dist/index.html 第 9–11 行的 9 个 token，不新增第 8 色 ══ */
+  :root{
+    --paper:#f3ecdf; --paper2:#eae1d0; --card:#faf6ec;
+    --ink:#2a2622; --ink2:#5c554b; --faint:#8d8577;
+    --zhu:#a63a2a; --line:#d3c8b4; --line2:#c0b49d;
+    --l1:2.2px; --l2:1.4px; --l3:0.9px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 窗口自适应（模板附录 A.2 / 坑 23）：宽度**同时**受「视窗宽 − 内边距」与
+     「(视窗高 − 台賬高 − 内边距) × 1200/720」两个上界约束，取最小。
+     旧版只写 min(97vw,1200px) —— 窗口一矮，舞台上下被切（1214×650 实测 top=−60 且出纵向滚动条）。
+     96px = 台賬 64 + 上下内边距 20 + 12px 余量。 */
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Songti SC","STSong",Georgia,"Noto Serif SC",serif;
+    display:flex; align-items:center; justify-content:center; padding:10px;
+  }
+  #app{width:min(100%,1200px,calc((100vh - 96px) * 1.66667));
+       display:flex;flex-direction:column;max-height:100%}
+  #stage{display:block;width:100%;height:auto;aspect-ratio:1200/720;background:var(--paper);overflow:hidden}
+  #hud{height:64px;flex:0 0 64px;display:flex;align-items:center;gap:14px;
+       background:var(--paper);border-top:1px solid var(--line2);padding:0 6px}
+  #slots{display:flex;gap:4px}
+  .slot{width:56px;height:56px;border:1px solid transparent;position:relative;cursor:default}
+  .slot .under{position:absolute;left:8px;right:8px;bottom:6px;height:1px;background:var(--line2)}
+  .slot svg{display:block;width:52px;height:52px;margin:1px;
+            transition:transform 120ms ease}
+  .slot.has{cursor:pointer}
+  .slot.sel{border-color:var(--zhu)}
+  .slot.sel svg{transform:translateY(-2px)}
+  #caption{margin-left:auto;margin-right:8px;max-width:62%;
+           font-family:"Kaiti SC","STKaiti","KaiTi",serif;
+           font-size:13px;line-height:1.6;color:var(--ink2);text-align:right;
+           opacity:0;transition:opacity 500ms ease}
+  #caption.on{opacity:1}
+  #caption.zhu{color:var(--zhu)}
+
+  /* ══ 线宽三级（1200×720 与近景同值；vector-effect 保证跨视图/跨缩放不漂移）══ */
+  .l1{stroke:var(--ink);stroke-width:var(--l1);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l2{stroke:var(--ink2);stroke-width:var(--l2);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .l3{stroke:var(--faint);stroke-width:var(--l3);stroke-linecap:round;stroke-linejoin:round;fill:none;vector-effect:non-scaling-stroke}
+  .miter{stroke-linejoin:miter}
+  .f-wood{fill:#b9a88c}
+  .f-card{fill:var(--card)}
+  .f-zhu{fill:var(--zhu)}
+  .tx{fill:var(--ink);font-family:"Songti SC","STSong",Georgia,serif}
+  .tx-k{fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .tx-z{fill:var(--zhu);font-family:"Kaiti SC","STKaiti","KaiTi",serif}
+  .vert{writing-mode:vertical-rl;text-orientation:upright}
+  .shadow{fill:var(--ink);opacity:.08;stroke:none}
+  .ns *{vector-effect:non-scaling-stroke}
+
+  /* ══ 视图切换 ══ */
+  .view{opacity:0;pointer-events:none;transition:opacity 500ms ease}
+  .view.active{opacity:1;pointer-events:auto}
+
+  /* ══ 真人可点（模板附录 A.4 / 坑 22）══════════════════════════
+     真因：`pointer-events` 可继承，但**子元素显式写值就压过继承**；
+     `.hs .hit{pointer-events:all}` 正是那个显式值，于是「关掉的」层里那些透明
+     `.hit` 矩形仍然接得住鼠标；而 `opacity:0` 也照样参与命中测试（只有
+     `display:none` 才退出）。两层相乘 → 真人的点击被看不见的矩形截走。
+     修法纯 CSS：把非活动层的**整棵子树**钉死，不动任何 `.hit` 写法、不动渐隐动画。
+     `#world.modal` 由 `syncModal()` 挂/摘（showLedger / boot 各调一次）。 */
+  .view:not(.active), .view:not(.active) *,
+  #ledger:not(.on),   #ledger:not(.on) *,
+  #bridge:not(.on),   #bridge:not(.on) *,
+  .paper:not(.show),  .paper:not(.show) *{pointer-events:none!important}
+  /* 上層（值房台賬）壓着時，底下場景整棵釘死 */
+  #world.modal .view, #world.modal .view *{pointer-events:none!important}
+  /* 心衣内衬那角纸头是「三件全归位后才淡入」的灰显层：未揭示时它的 .hit
+     仍是显式 `all`，会把抱腹中段的点击吃掉（修前实测 h_garment_b 中心命中它，
+     页面毫无反应）→ 未 `.show` 时整棵连同 .hit 一起钉死。 */
+  #lining:not(.show), #lining:not(.show) *{pointer-events:none!important}
+
+  /* ══ 热点：默认 / 可点 / 已取 三态光标 ══ */
+  .hs{cursor:default}
+  .hs .hit{fill:transparent;stroke:none;pointer-events:all}
+  /* 命中**只认 `.hit`**：`.art` 一律不吃鼠标。修前实测三处「中心点被自己这一族的
+     装饰路径截走」—— 全景/近景里点案面中段命中抽屉面板、柜体中心命中抱腹的衣面，
+     改后这些点落回各自的 `.hit`。悬停不受影响：光标进了 `.hit` 就是 `.hs:hover`。 */
+  .hs .art{pointer-events:none}
+  .hs.on .hit{cursor:pointer}
+  .hs.on:hover .art path,.hs.on:hover .art rect,.hs.on:hover .art circle,
+  .hs.on:hover .art line,.hs.on:hover .art polygon{stroke:var(--zhu);stroke-width:3}
+  .hs.armed .art path,.hs.armed .art rect,.hs.armed .art circle,
+  .hs.armed .art line,.hs.armed .art polygon{stroke:var(--zhu);stroke-width:3}
+  /* 窗外一枝属「场景」（在窗纸之后、窗棂之前），不是可点物件本体
+     → 不随可点态描边转朱砂。选择器多一层 .scenery，(0,5,1) > (0,4,1) */
+  .hs.on:hover .art .scenery path,.hs.on:hover .art .scenery circle{
+    stroke:var(--faint);stroke-width:var(--l3)}
+  .hs.gone, .hs.gone *{pointer-events:none}
+  .hs.gone .art{opacity:0}
+  .hs.breathe .art *{stroke:var(--zhu)!important;animation:breathe 1.2s ease-in-out 2}
+  @keyframes breathe{0%,100%{stroke-opacity:1}50%{stroke-opacity:.4}}
+
+  /* ══ 世界变化 ① 抽屉（class 驱动，不另维护坐标表）══
+     视角改造：抽屉拉开后要能看见「内腔」——腔口画在案身正面上，
+     由 opacity 淡入（不参与位移），位移仍只作用在 #drawer-body 上 */
+  #drawer-body{transform:translateY(0);transition:transform 700ms cubic-bezier(.2,.8,.2,1)}
+  #drawer.open #drawer-body{transform:translateY(54px)}
+  #drawer.open .drawer-plaques{opacity:1;transition:opacity 300ms ease 500ms}
+  #drawer .drawer-plaques{opacity:0}
+  #drawer .rail{opacity:0;transition:opacity 300ms ease 400ms}
+  #drawer.open .rail{opacity:1}
+  /* 抽屉内腔（腔口 + 两侧壁 + 腔内底板）：闭合时完全不可见 */
+  #drawer .drawer-cavity{opacity:0;transition:opacity 260ms ease 90ms}
+  #drawer.open .drawer-cavity{opacity:1}
+
+  /* ══ 视角规格：轻斜投影（微斜/等轴测，非透视）══════════════════
+     深度轴只落在「上/下」一个方向：dy = -0.35 · depth（见 实现说明 §11）。
+     由此**所有水平面**（地面、案面、柜内隔板、暗格底、箱盖内底）
+     在画面上都是一个「有厚度的小矩形面」——面可见，光才有地方落。
+     水平面专门用 4 条短横线（L3）示意进深方向，不画木纹。 */
+  .floor{fill:var(--paper2);stroke:none}
+  .slab{fill:var(--card);stroke:none}
+  .recess{fill:var(--paper2);stroke:none}
+  /* 美术微调 ②（2026-10-15）：**书架层板的板面**改用「面」色 --paper2。
+     理由：书架四层板面原用 --card（#faf6ec，全幅最亮的一档），在旧木书架上
+     形成四道白亮带，与「旧木」气质相冲；--paper2 是既有 token、且本来就是
+     「水平面」的用色（地面 / 案面 / 窗台 / 暗格腔底全用它），换上去既统一又退到后面。
+     **不加新色、不动线宽、不动进深（板面仍 10px + 板厚前棱 4px）。**
+     为什么**不**一并改「柜内隔板」（同样用 .slab）：柜内背板本身就是
+     .recess（--paper2），板面若同色就看不见板了 —— 故柜内隔板仍留 --card。 */
+  #view-room .slab,#view-shelf .slab{fill:var(--paper2)}
+  #view-right .drawer-cavity{opacity:0;transition:opacity 500ms ease 260ms}
+  #view-right.open .drawer-cavity{opacity:1}
+  #secret .secret-cavity{opacity:0;transition:opacity 260ms ease 200ms}
+  #secret.open .secret-cavity{opacity:1}
+
+  /* ══ 世界变化 ② 柜门（两扇向外转开 900ms；收拢后落在柜体之外）
+     视角改造：门扇本身有厚度，柜门组里另有一条「门侧厚度面」（.door-edge），
+     与门扇同时开合 —— 于是开门时看得见门板的厚度，不只是两块薄片平移 */
+  .door{transition:transform 900ms cubic-bezier(.25,.8,.3,1),opacity 900ms ease;
+        pointer-events:none}   /* 门只是柜体的面板：点它走下面那张柜体热区（见结构注释） */
+  #view-right.open .door-l{transform:translateX(-96px) scaleX(.16)}
+  #view-right.open .door-r{transform:translateX(96px) scaleX(.16)}
+  #view-right.open .door{opacity:.55}
+  #view-right .cab-inner{opacity:0;transition:opacity 500ms ease 350ms;
+    transform:translate(48px,112px) scale(.9)}
+  #view-right.open .cab-inner{opacity:1}
+
+  /* ══ 朱砂洇开 / 污斑 ══ */
+  .ink-blot{transform-origin:center;transform:scale(.15);opacity:0;
+            transition:transform 600ms cubic-bezier(.2,.7,.3,1),opacity 400ms ease}
+  .smudged .ink-blot{transform:scale(1);opacity:1}
+  .blotted .ink-blot{opacity:.12;transition:opacity 300ms ease}
+  .sealmark{opacity:0;transform:scale(.6);transform-origin:center;
+            transition:opacity 260ms ease 380ms,transform 260ms cubic-bezier(.2,.8,.2,1) 380ms}
+  .sealed .sealmark{opacity:1;transform:scale(1)}
+
+  /* ══ 木牌嵌入 ══ */
+  .plaque{opacity:0;transform:translateY(-14px);transition:opacity 160ms ease,transform 120ms cubic-bezier(.2,.9,.3,1.4)}
+  .in-slot .plaque{opacity:1;transform:translateY(0)}
+
+  /* ══ 塔：整体竖向比例 + 塔尖升降 ══ */
+  #tower{transform-origin:440px 560px;transform:scaleY(1);transition:transform 700ms cubic-bezier(.3,.8,.3,1)}
+  #fig.fig15 #tower{transform:scaleY(.9029)}
+  #fig.fig1000 #tower{transform:scaleY(1.4286)}
+  #pillar{transform-origin:440px 160px;transform:scaleY(.0343);transition:transform 700ms cubic-bezier(.3,.8,.3,1)}
+  #fig.fig15 #pillar{transform:scaleY(1.113)}
+  #fig.fig1000 #pillar{opacity:0}
+  #fig.fig13 .ring14,#fig.fig13 .ring15{opacity:0;transition:opacity 300ms ease}
+  .ring14,.ring15{opacity:1;transition:opacity 300ms ease}
+  #frame-lift{opacity:0;transition:opacity 400ms ease}
+  #fig.fig1000 #frame-lift{opacity:1}
+
+  /* ══ 世界变化 ③ 尺标底座暗格 ══ */
+  #secret-lid{transform:translateY(0);transition:transform 420ms cubic-bezier(.2,.9,.3,1.5)}
+  #secret.open #secret-lid{transform:translateY(-13px) rotate(-3deg)}
+  #secret .secret-in{opacity:0;transition:opacity 300ms ease 260ms}
+  #secret.open .secret-in{opacity:1}
+
+  /* ══ 心衣内衬残纸 淡入 ══ */
+  #lining{opacity:0;pointer-events:none;transition:opacity 400ms ease}
+  #lining.show{opacity:1;pointer-events:auto}
+
+  /* ══ 衣物挂错：顺墙滑回柜中 ══ */
+  @keyframes slideback{
+    0%{transform:translate(0,0) rotate(0deg);opacity:1}
+    55%{transform:translate(calc(var(--dx)*.6),calc(var(--dy)*.45)) rotate(9deg);opacity:1}
+    100%{transform:translate(var(--dx),var(--dy)) rotate(16deg);opacity:0}
+  }
+  .sliding{animation:slideback 550ms ease-in forwards;pointer-events:none}
+  @keyframes tagshake{0%,100%{transform:rotate(0)}35%{transform:rotate(-2deg)}70%{transform:rotate(2deg)}}
+  .tagshake{animation:tagshake 120ms ease-in-out 2;transform-origin:center}
+
+  /* ══ 烛光呼吸（唯一会动的光源；不做火苗形状）══ */
+  @keyframes candle{0%,100%{opacity:.9}50%{opacity:.62}}
+  #candle-halo{animation:candle 3.4s ease-in-out infinite}
+  @keyframes candle-flick{0%,100%{opacity:1}40%{opacity:.75}60%{opacity:.95}}
+  /* 晃一下之后回到呼吸。动画简写只有 #id 能压过 #id，故须写成 #candle-halo.flick */
+  #candle-halo.flick{animation:candle-flick 200ms ease-out 1,candle 3.4s ease-in-out 200ms infinite}
+
+  /* ══ 进场自动推近书案（纯演出，不可拒绝）══ */
+  @keyframes intro{
+    0%{transform:scale(1)}40%{transform:scale(1.08)}70%{transform:scale(1.08)}100%{transform:scale(1)}
+  }
+  #world.intro{animation:intro 3.1s cubic-bezier(.4,0,.2,1) 1;transform-origin:600px 452px}
+
+  /* ══ 纸（在场景内放大展开，不切屏、不加暗底遮罩）══ */
+  .paper{opacity:0;pointer-events:none;transition:opacity 260ms ease}
+  .paper.show{opacity:1;pointer-events:auto}
+  .paper-title{font-size:21px;fill:var(--ink);letter-spacing:.18em}
+  .paper-sub{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+  .paper-body{font-size:17px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.02em}
+  .paper-body .key{font-size:19px}
+  .paper-close{font-size:12px;fill:var(--faint);letter-spacing:.08em}
+
+  /* ══ 外壳：典藏司「值房台账」——玩家从台账进房间，不是从「开始」进 ══ */
+  #ledger{opacity:0;pointer-events:none;transition:opacity 420ms ease}
+  #ledger.on{opacity:1;pointer-events:auto}
+  .led-lede{font-size:26px;fill:var(--ink);letter-spacing:.22em}
+  .led-sub{font-size:13px;fill:var(--faint);letter-spacing:.12em}
+  .led-item{font-size:19px;fill:var(--ink);font-family:"Kaiti SC","STKaiti","KaiTi",serif;letter-spacing:.04em}
+  .led-item.done{fill:var(--faint)}
+  .led-act{font-size:21px;fill:var(--ink);letter-spacing:.2em}
+  .led-hint{font-size:13px;fill:var(--faint);letter-spacing:.1em}
+
+  /* ══ 物品栏缩略图（symbol 自带表现属性，不依赖文档 CSS 进 shadow tree）══ */
+  .slotslot svg{overflow:visible}
+  #boot{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
+        justify-content:center;font-size:15px;color:var(--ink2);letter-spacing:.3em;z-index:9}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+
+<div id="boot">校書閣</div>
+
+<div id="app">
+  <svg id="stage" viewBox="0 0 1200 720" shape-rendering="geometricPrecision"
+       xmlns="http://www.w3.org/2000/svg" role="application" aria-label="典藏司校書閣 第一幕">
+    <defs>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="n"/>
+        <feColorMatrix in="n" type="saturate" values="0"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+    <g id="world">
+
+      <!-- ══════════════════ view-room ══════════════════
+           视角：轻斜投影 dy = -0.35·depth（详见 实现说明 §11）。
+           水平面 = 一个「有厚度的小矩形面」；竖直面 = 一条窄的侧面条。
+           以下 ① 地面 → ② 踢脚线/地平线 → ③ 墙脚家具 → ④ 案 → ⑤ 案上物 → ⑥ 烛光 -->
+      <g id="view-room" class="view active">
+        <!-- ① 地面（水平面）：远边在墙脚（y≈631），近边落在画面之外。
+             这一条从 631 到 720 的浅色带就是「地」——家具的脚都踩在这条带上 -->
+        <path class="floor" d="M42,630.4 C300,629.6 700,631.2 1158,628.6 L1158,726 L42,726 Z"/>
+        <path class="l3 miter" d="M150,700 C400,698.6 800,701 1086,698.8"/>
+        <path class="l3 miter" d="M1136,646 C1137.2,678 1136.4,700 1137,718"/>
+        <path class="l3 miter" d="M62,646 C61,678 61.8,700 61,718"/>
+        <!-- ② 踢脚线（地平线＝墙与地的那条交界）：一笔，家具压其上、只在空处露头 -->
+        <path class="l2" d="M42,630.6 C300,628.8 700,631.4 1158,629.6"/>
+        <!-- A 书架（靠墙）：每层板的**板面**看得见（板面 dy=10 + 板厚前棱 dy≈3）。
+             板与「匣中舊拓」不随可点态描边，故 .art 只包板与匣 -->
+        <g class="hs on" data-hs="h_shelf">
+          <rect class="hit" x="76" y="88" width="304" height="544"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M78,89.4 C178,87.6 300,90.2 382,88.6 L384,626.6 C378,630.8 374,631.4 368,631.6 C300,633.2 178,630.6 78,632.4 Z"/>
+            <path class="l1 miter" d="M98,109.4 C178,107.8 300,110.2 362,108.6 L364,608.4 C300,610.2 178,607.6 98,609.4 Z"/>
+            <path class="slab" d="M98,223.6 C178,222.4 300,224.8 362,223.4 L362,233.6 C300,235 178,232.6 98,233.8 Z"/>
+            <path class="l1 f-card" d="M98,233.6 C178,232.4 300,234.8 362,233.4 L362,237.4 C300,238.8 178,236.4 98,237.6 Z"/>
+            <path class="l3 miter" d="M150,226.4 L150,232.8 M300,225.4 L300,231.8"/>
+            <path class="l2" d="M100,233.6 C178,232.4 300,234.8 362,233.4"/>
+            <path class="slab" d="M98,348.4 C178,347.2 300,349.6 362,348.2 L362,358.4 C300,359.8 178,357.4 98,358.6 Z"/>
+            <path class="l1 f-card" d="M98,358.4 C178,357.2 300,359.6 362,358.2 L362,362.2 C300,363.6 178,361.2 98,362.4 Z"/>
+            <path class="l3 miter" d="M150,351.2 L150,357.6 M300,350.2 L300,356.6"/>
+            <path class="l2" d="M100,358.4 C178,357.2 300,359.6 362,358.2"/>
+            <path class="slab" d="M98,473.6 C178,472.4 300,474.8 362,473.4 L362,483.6 C300,485 178,482.6 98,483.8 Z"/>
+            <path class="l1 f-card" d="M98,483.6 C178,482.4 300,484.8 362,483.4 L362,487.4 C300,488.8 178,486.4 98,487.6 Z"/>
+            <path class="l3 miter" d="M150,476.4 L150,482.8 M300,475.4 L300,481.8"/>
+            <path class="l2" d="M100,483.6 C178,482.4 300,484.8 362,483.4"/>
+            <path class="slab" d="M98,598.4 C178,597.2 300,599.6 362,598.2 L362,608.4 C300,609.8 178,607.4 98,608.6 Z"/>
+            <path class="l1 f-card" d="M98,608.4 C178,607.2 300,609.6 362,608.2 L362,612.2 C300,613.6 178,611.2 98,612.4 Z"/>
+            <path class="l3 miter" d="M150,601.2 L150,607.6 M300,600.2 L300,606.6"/>
+            <path class="l2" d="M100,608.4 C178,607.2 300,609.6 362,608.2"/>
+            <path class="l2" d="M186,124 L186,596 M272,124 L272,596"/>
+            <g id="room-box"><path class="l1 f-card" d="M112,128 L178,128 L178,228 L112,228 Z"/>
+              <path class="l2" d="M112,156 L178,156"/><path class="l2" d="M138,140 L152,140"/></g>
+          </g>
+          <!-- 层内的书（细节线，不随可点态描边） -->
+          <g class="scenery">
+            <path class="l3" d="M108,148 L172,148 M108,164 L166,164 M108,180 L172,180"/>
+            <path class="l3" d="M196,254 L252,254 M196,270 L246,270"/>
+            <path class="l3" d="M108,380 L168,380 M108,396 L172,396 M108,412 L160,412"/>
+            <path class="l3" d="M196,506 L256,506 M196,522 L240,522"/>
+          </g>
+        </g>
+
+        <!-- B 支摘窗 + 窗外一枝（先窗纸 → 再画枝 → 最后压窗棂格；枝隔纸可见） -->
+        <g class="hs on" data-hs="h_window">
+          <rect class="hit" x="432" y="96" width="336" height="148"/>
+          <g class="art">
+            <path class="l1 f-card" d="M434,97.4 C534,95.6 668,98.2 766,96.6 L768,242.4 C668,244.2 534,241.6 434,243.4 Z"/>
+            <!-- 窗外那一枝：细节线 0.9px 实线（原先被窗纸压住，等于看不见） -->
+            <g class="scenery">
+              <!-- 折枝：自左下角入画，节上生三短枝、二叶、三花，不满窗 -->
+              <path class="l3" d="M444,240.6 C464,228 482,220 500,211 C518,202 528,194 542,183"/>
+              <path class="l3" d="M500,211 C505,198 511,189 518,178"/>
+              <path class="l3" d="M542,183 C552,172 560,164 570,156"/>
+              <path class="l3" d="M542,183 C554,190 564,198 572,208"/>
+              <path class="l3" d="M506,208.6 C512,202 518,199 524,198"/>
+              <path class="l3" d="M534,190.6 C540,186 546,184 552,183"/>
+              <circle class="l3" cx="518" cy="174" r="5.2" fill="none"/>
+              <circle class="l3" cx="573" cy="152" r="4.6" fill="none"/>
+              <circle class="l3" cx="575" cy="211" r="4.4" fill="none"/>
+            </g>
+            <!-- 窗棂格：4 竖 3 横，长线各带 1px 手抖 -->
+            <path class="l2" d="M503,100.6 C504,147 502.2,194 503.4,240.4 M568,100.4 C569,147 567.4,194 568.2,240.6 M634,100.8 C635,147 633.2,194 634.4,240.2 M699,100.4 C700,147 698.2,194 699.4,240.6"/>
+            <path class="l2" d="M438.6,136 C521,134.8 681,137.2 763.4,135.8 M438.4,170.4 C521,169.2 681,171.6 763.6,170.2 M438.8,204.6 C521,203.4 681,205.8 763.2,204.4"/>
+            <!-- 窗台（水平面）：支摘窗下槛向外挑出 16，压出 8px 的台面 + 3 条 L3 进深线
+                 —— 改造前窗只有窗纸一块矩形，窗下没有任何「台面」可看 -->
+            <path class="floor" d="M428,242.6 C534,241.6 668,243.4 770,242.4 L770,250.6 C668,251.6 534,249.8 428,250.8 Z"/>
+            <path class="l1" d="M428,242.6 L770,242.4 L770,250.6 C668,251.6 534,249.8 428,250.8 L428,242.6 Z"/>
+            <path class="l3 miter" d="M486,243.1 L486,250.2 M600,242.9 L600,250.6 M700,242.6 L700,250.3"/>
+            <path class="l2" d="M446,104 C546,102.4 668,105 756,103.6"/>
+          </g>
+        </g>
+
+        <!-- 窗下 值房体例纸条（本幕唯一规则说明，以环境物件呈现） -->
+        <g class="hs on" data-hs="h_rule">
+          <rect class="hit" x="540" y="252" width="160" height="56"/>
+          <g class="art">
+            <path class="l1 f-card" d="M552,262.4 C602,260.8 648,263.2 688,261.6 L689,295.4 C648,297.2 602,294.6 552,296.4 Z"/>
+            <path class="l3" style="stroke:var(--zhu)" d="M564,272 L660,272 M564,281 L640,281 M564,290 L600,290"/>
+          </g>
+        </g>
+
+        <!-- C 书案（含案上全部物件）
+             视角改造的核心一处：案面终于**可见** ——
+               · 案面（水平面，40px 进深的带，y 370–410）= 光斑与案上物件的落面
+               · 案面前棱的厚度面（一条 5px 窄条，y 410–415）
+               · 案身＝两条案脚 + 案面子 + 下枨，**中间留空**（抽屉从中抽出来） -->
+        <g class="hs on" data-hs="h_desk">
+          <!-- 热区下沿 506 → 570：新增的中枨（y≈545）与下枨同属书案本体，
+               热区必须罩住，否则悬停不转朱砂、点它也没反应（逻辑与 flags 未动） -->
+          <rect class="hit" x="290" y="330" width="510" height="240"/>
+          <g class="art">
+            <path class="case-top floor" d="M300,370.4 C440,368.6 620,371.2 790,369.6 L790,410.4 C620,412.2 440,409.6 300,411.4 Z"/>
+            <path class="l1" d="M300,370.4 C440,368.6 620,371.2 790,369.6 L790,410.4 C620,412.2 440,409.6 300,411.4 L300,370.4 Z"/>
+            <path class="l1 f-wood" d="M300,410.4 C440,408.6 620,411.2 790,409.6 L790,416.4 C620,418.2 440,415.6 300,417.4 Z"/>
+            <path class="l3 miter" d="M360,374 L360,406 M520,372.6 L520,404.6 M700,372.4 L700,404.4"/>
+            <path class="l3 miter" d="M420,376.4 L420,408.4 M720,375.2 L720,407.2"/>
+            <path class="l1 f-wood" d="M302,410.4 C310,409.6 328,411.2 336,410.4 L338,596.4 C328,598.2 310,596.6 300,597.4 L300,410.4 Z"/>
+            <path class="l1 f-wood" d="M766,410.4 C774,409.6 784,411.2 790,410.4 L790,597.4 C784,598.2 774,596.6 766,596.4 Z"/>
+            <path class="l1 f-wood" d="M300,582.4 C440,580.6 620,583.2 790,581.6 L790,597.4 C620,599.2 440,596.6 300,598.4 Z"/>
+            <path class="l3 miter" d="M320,426 L320,580 M770,426 L770,580"/>
+            <!-- 美术微调 ①（2026-10-15）：**案身中枨（横枨）** —— 一条 L2 结构线，
+                 连在两腿内侧（x=337 → 767, y≈545）。案身正面原先从案面前棱（y≈417）
+                 到下枨（y≈582）是一整块留白，看着「空」；补上这一条后，案身正面被
+                 分成「抽屉以下 / 中枨以下」两档，案脚与下枨之间有了结构。
+                 只用**一条线**：不新增平涂块、不画木纹、不加新色、不动线宽三级。 -->
+            <path class="l2" d="M337,545.4 C460,543.8 640,546.6 767,544.8"/>
+          </g>
+        </g>
+
+        <!-- 案上物件：全部**落在**那条 40px 的案面带里（y≈370–410）。
+             俯视时案面是水平面 —— 印盒「半开」因此看得见盒内的朱砂，
+             盒盖翻起就是一块朝上的水平小面；印顶也是水平小面。
+             （不单设热点：点案上物件＝点书案 h_desk，与改造前一致） -->
+        <g class="art">
+            <!-- 印盒：盒身一块，盒内一小块朱砂平涂（既存，非本次新增本体平涂） -->
+            <path class="l1 f-wood" d="M336,386.6 C352,385.4 366,387 380,385.8 L381,411.4 C366,412.6 352,411 336,412.2 Z"/>
+            <path class="l1 f-zhu" d="M342,390.6 L374,390.2 L374,407.4 L342,407.8 Z"/>
+            <!-- 翻起的盒盖（水平小面） -->
+            <path class="l1 f-card" d="M332,366.6 C354,365.6 378,367.2 398,366.4 L398,376.4 C378,377.2 354,375.8 332,376.6 Z"/>
+            <path class="l3 miter" d="M340,372.6 L392,372.2"/>
+            <!-- 校印 / 異印：印身落在案面上，印顶是一块 h=4 的水平小面 -->
+            <path class="l1 f-wood" d="M400,390.6 C410,389.8 420,391.4 430,390.4 L430,412.4 C420,413.2 410,411.8 400,412.6 Z"/>
+            <path class="l1 f-card" d="M400,384.6 C410,383.8 420,385.4 430,384.4 L430,390.6 C420,391.4 410,389.8 400,390.6 Z"/>
+            <path class="l3" d="M406,398 L424,397.6 M406,404.4 L424,404"/>
+            <path class="l1 f-wood" d="M436,394.4 C446,393.6 456,395.2 466,394.2 L466,412.6 C456,413.4 446,412 436,412.8 Z"/>
+            <path class="l1 f-card" d="M436,388.4 C446,387.6 456,389.2 466,388.2 L466,394.4 C456,395.2 446,393.6 436,394.4 Z"/>
+            <path class="l3" d="M442,400 L460,399.6 M442,405.4 L460,405"/>
+            <!-- 吸墨纸（薄，平铺在案面上；不画纸纤维） -->
+            <path class="l1 f-card" d="M472,392.6 C488,391.8 500,393.4 512,392.4 L512,412.4 C500,413.2 488,411.8 472,412.6 Z"/>
+            <path class="l3" d="M478,399 L506,398.6 M478,405 L502,404.6 M478,410 L506,409.6"/>
+            <!-- 残页甲（左）与残页乙（右）：平铺在案面上，下沿压着案面前棱 -->
+            <path class="l1 f-card" d="M536,378.6 C568,376.4 606,379.4 638,377.6 L642,412.4 C606,414.6 568,411.6 536,413.4 Z"/>
+            <path class="l3" style="stroke:var(--zhu)" d="M556,392 L618,391.6 M556,400 L606,399.6"/>
+            <path class="l1 f-card" d="M668,380.6 C700,378.4 738,381.4 768,379.6 L770,412.4 C738,414.6 700,411.6 668,413.4 Z"/>
+            <path class="l3" d="M688,394 L748,393.6 M688,402 L736,401.6 M688,409 L748,408.6"/>
+          </g>
+
+        <!-- 营造图（焦点；全幕唯一斜放 15° 的物件）：平摊在案面上
+             （视角改造后案面可见，故略微缩小并把斜放角保持 15°） -->
+        <g class="hs on" data-hs="h_scroll">
+          <rect class="hit" x="452" y="322" width="228" height="80"/>
+          <g class="art">
+            <g transform="translate(556,432) rotate(-15) scale(.86)">
+              <path class="l1 f-card" d="M-102,-33.6 C-34,-35.4 36,-32.8 100,-34.4 L102,33.4 C36,35.2 -34,32.6 -102,34.4 Z"/>
+              <path class="l2" d="M22,-26 L22,26 M-6,-26 L-6,26 M-40,-26 L-40,26"/>
+              <path class="l2" d="M-34,26 L-34,4 M-14,26 L-14,-4 M6,26 L6,-8"/>
+              <path class="l3" style="stroke:var(--zhu)" d="M64,-8 L88,-8 M64,0 L84,0 M64,8 L88,8"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- 案脚接触影：两条案脚落在「地」上（地面上唯一一层影，贴底 8% 墨） -->
+        <rect class="shadow" x="302" y="596" width="36" height="6" rx="3"/>
+        <rect class="shadow" x="764" y="596" width="26" height="6" rx="3"/>
+
+        <!-- 抽屉（初始闭合：只看得见一条缝与一枚铜拉手）
+             视角改造第二处核心：拉开后除了前脸下移（54px），还看得见「内腔」——
+             .drawer-cavity（腔口 + 腔内后壁进深条 + 两条导轨）由 opacity 淡入
+             抽屉回窄（2026-10-15）：面板 x 383–721（宽 338）→ x 400–704（宽 304）。
+             理由：338px 几乎占满两案腿之间，读起来像「抽屉桌」而不是书案；回窄后
+             面板外沿与腔口（x 424–702）的关系更贴身，两腿之间留白交给案身中枨分档。
+             只改尺寸：三条 path 的坐标与命中矩形同步，逻辑与 flags 一行未动。 -->
+        <!-- 抽屉（**不是**独立热点：见下）
+             真鼠标实测（_selftest\_fix1\walk1.js 第 02 步 MISS）：书案热区的中心
+             (545,450) 正落在这张抽屉面上的抽屉热区里 → 真人点案心得到的是
+             「抽屜還閉著，只看得見一條縫」，**链①的入口点不动**。
+             处置：全景这张抽屉并入书案（抽屉本来就只在案头近景里拉得开，
+             近景 `#drawer-desk` 那张热区保留、仍会给那句话）。
+             `#drawer` 这个 id 必须留给 `render()` 挂 `.open`（世界变化的 class 驱动）。 -->
+        <g id="drawer" style="pointer-events:none">
+          <g class="art">
+            <g id="drawer-room">
+              <g class="drawer-cavity">
+                <path class="recess" d="M424,416.4 C500,414.8 610,417.4 700,415.6 L702,534.4 C610,536.2 500,533.6 424,535.4 Z"/>
+                <path class="l2 miter" d="M424,416.4 L424,535.4 M702,415.6 L702,534.4 M424,535.4 C500,533.6 610,536.2 702,534.4"/>
+                <path class="l3 miter" d="M440,416.2 L440,534.6 M686,415.4 L686,533.8 M456,416 L456,533.8 M670,415.2 L670,533"/>
+                <path class="l2 rail" d="M426,516.4 C500,514.8 610,517.2 700,515.6"/>
+                <path class="l2 rail" d="M426,532.6 C500,531 610,533.4 700,531.8"/>
+              </g>
+              <g id="drawer-body">
+                <path class="l1 f-wood" d="M400,420.4 C481,418.6 616,421.4 704,419.6 L704,506.4 C616,508.4 481,505.4 400,507.4 Z"/>
+                <path class="l1 f-wood" d="M400,420.4 C481,418.6 616,421.4 704,419.6 L704,426.6 C616,428.4 481,425.4 400,427.4 Z"/>
+                <path class="l2" d="M518,468.6 C530,467.4 544,469.8 556,468.4"/>
+              </g>
+            </g>
+          </g>
+        </g>
+
+        <!-- 烛台（书案右角；全幕唯一会动的光源；不做火苗形状）
+             三层＝① 烛台本体 ② 一圈暖光晕（同心圆做无渐变的径向衰减）
+                    ③ **案面亮斑**——改造后案面可见，光斑终于有地方落：
+                       落在 .case-top 那条 40px 的水平带里（y≈400–440），
+                       且按 dy=-0.5·depth 压成 2:1 的扁椭圆 -->
+        <g id="candle-halo" pointer-events="none">
+          <circle cx="736" cy="362" r="72" fill="var(--zhu)" opacity=".016"/>
+          <circle cx="736" cy="362" r="58" fill="var(--zhu)" opacity=".020"/>
+          <circle cx="736" cy="362" r="44" fill="var(--zhu)" opacity=".026"/>
+          <circle cx="736" cy="362" r="31" fill="var(--zhu)" opacity=".034"/>
+          <circle cx="736" cy="362" r="20" fill="var(--zhu)" opacity=".046"/>
+          <circle cx="736" cy="362" r="11" fill="var(--zhu)" opacity=".062"/>
+          <!-- 案面亮斑：案面是水平面 → 正圆的光斑按 dy=-0.5·depth 压成扁椭圆
+               （rx:ry = 2:1，这是投影压扁，不是渐变的径向衰减）
+               先铺「亮」（浅纸面 .42）再叠「暖」（朱砂 .075）＝只靠透明度，不用渐变 -->
+          <ellipse cx="736" cy="390" rx="44" ry="18" fill="var(--card)" opacity=".42"/>
+          <ellipse cx="736" cy="390" rx="28" ry="11.2" fill="var(--zhu)" opacity=".075"/>
+        </g>
+        <g id="candle-stand" pointer-events="none">
+          <!-- 烛身：立在案面上（底面 y=390 落在案面带 370–410 里，不压前棱） -->
+          <path class="l1 f-card" d="M730,390 L730,354 C730,350.2 742,350.2 742,354 L742,390 Z"/>
+          <!-- 铜烛盘：铜件不平涂，只一条 L2 轮廓 —— 盘是一个水平小面（扁椭圆），
+               现在有案面接着，盘底不再借用案沿闭合 -->
+          <ellipse class="l2" cx="736" cy="390" rx="13" ry="5.4" fill="none"/>
+        </g>
+
+        <!-- D 横木 · 三张木签（乱序） -->
+        <g class="hs on" data-hs="h_wall">
+          <rect class="hit" x="828" y="98" width="300" height="144"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M830,105.4 C930,103.6 1040,106.2 1126,104.6 L1127,127.4 C1040,129.2 930,126.6 830,128.4 Z"/>
+            <path class="l1 f-card" d="M862,132.4 L904,131.6 L905,222.4 L863,223.2 Z" transform="rotate(-1 883 177)"/>
+            <path class="l1 f-card" d="M950,133.6 L992,132.8 L993,223.6 L951,224.4 Z" transform="rotate(1 971 178)"/>
+            <path class="l1 f-card" d="M1038,131.4 L1080,130.6 L1081,221.4 L1039,222.2 Z" transform="rotate(-.6 1059 176)"/>
+            <path class="l3" d="M866,138 L900,138 M970,240 L1000,240 M878,246 L906,246 M1058,238 L1086,238"/>
+            <circle class="l2" cx="883" cy="236" r="5" fill="none"/>
+            <circle class="l2" cx="971" cy="238" r="5" fill="none"/>
+            <circle class="l2" cx="1059" cy="235" r="5" fill="none"/>
+          </g>
+        </g>
+
+        <!-- E 高柜（门可开，通向右侧近景）——柜门朝观者，门板厚度在近景里画 -->
+        <g class="hs on" data-hs="h_cabinet">
+          <rect class="hit" x="848" y="252" width="272" height="384"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M850,257.4 C952,255.6 1042,258.2 1120,256.6 L1122,626.4 C1042,628.2 952,625.6 850,627.4 Z"/>
+            <path class="l1 miter" d="M872,280.4 C952,278.8 1042,281.2 1100,279.6 L1102,606.4 C1042,608.2 952,605.6 872,607.4 Z"/>
+            <path class="l2" d="M986,280 L986,606"/>
+            <circle class="l2" cx="972" cy="440" r="5" fill="none"/>
+            <circle class="l2" cx="1000" cy="440" r="5" fill="none"/>
+            <path class="l2" d="M960,428 L960,452 M1012,428 L1012,452"/>
+          </g>
+        </g>
+
+        <!-- 地面接触影：唯一一层阴影（贴底 8% 墨，贴在地平线上、朝「地」的一侧） -->
+        <rect class="shadow" x="82" y="630" width="296" height="7" rx="3"/>
+        <rect class="shadow" x="854" y="628" width="262" height="7" rx="3"/>
+
+        <!-- 噪点层：一张，全场景共用，opacity 3–6%，近景不再加。
+             `fill` 显式写成 --ink：滤镜子链 feTurbulence → feColorMatrix 自己生成整幅
+             噪点、**完全替换**源图形，所以这个 fill 不参与成像（像素与改前逐点相同）；
+             写它是为了让实机 computed 取值只剩 8 个（原来这一格落的是默认黑，成了第 9 个）。 -->
+        <rect x="0" y="0" width="1200" height="720" fill="var(--ink)" filter="url(#grain)"
+              opacity="0.045" style="mix-blend-mode:multiply" pointer-events="none"/>
+      </g>
+
+      <!-- ══════════════════ view-shelf ══════════════════
+           视角：同 #view-room（轻斜投影）。四层架的每一层板 = 一条水平面，
+           被书/木签压住后只在空处露头；格内立的是书，不是平摊物，故只见板面窄边 -->
+      <g id="view-shelf" class="view" transform="translate(120,40)">
+        <path class="l1 f-wood" d="M88,78.4 C300,76.6 660,79.2 872,77.6 L874,604.4 C660,606.2 300,603.6 88,605.4 Z"/>
+        <path class="l1 miter" d="M110,100.4 C300,98.8 660,101.2 850,99.6 L852,582.4 C660,584.2 300,581.6 110,583.4 Z"/>
+        <!-- 每层板面（水平面，10px 进深）+ 板厚的一道前棱（3px） -->
+        <path class="slab" d="M114,208.6 C300,207.4 660,209.8 848,208.4 L848,218.6 C660,220 300,217.6 114,218.8 Z"/>
+        <path class="l2" d="M114,218.6 C300,217.4 660,219.8 848,218.4"/>
+        <path class="l3 miter" d="M114,213.6 C300,212.4 660,214.8 848,213.4"/>
+        <path class="slab" d="M114,327.4 C300,326.2 660,328.6 848,327.2 L848,337.4 C660,338.8 300,336.4 114,337.6 Z"/>
+        <path class="l2" d="M114,337.4 C300,336.2 660,338.6 848,337.2"/>
+        <path class="l3 miter" d="M114,332.4 C300,331.2 660,333.6 848,332.2"/>
+        <path class="slab" d="M114,446.6 C300,445.4 660,447.8 848,446.4 L848,456.6 C660,458 300,455.6 114,456.8 Z"/>
+        <path class="l2" d="M114,456.6 C300,455.4 660,457.8 848,456.4"/>
+        <path class="l3 miter" d="M114,451.6 C300,450.4 660,452.8 848,451.4"/>
+        <path class="slab" d="M114,564.4 C300,563.2 660,565.6 848,564.2 L848,574.4 C660,575.8 300,573.4 114,574.6 Z"/>
+        <path class="l2" d="M114,574.4 C300,573.2 660,575.6 848,574.2"/>
+        <path class="l3 miter" d="M114,569.4 C300,568.2 660,570.6 848,569.2"/>
+        <!-- 架脚落在地面上（同 #view-room 的地平线），接触影一层 -->
+        <rect class="shadow" x="118" y="586" width="728" height="6" rx="3"/>
+
+        <g class="hs on" data-hs="h_box"><rect class="hit" x="140" y="118" width="130" height="102"/>
+          <g class="art">
+            <path class="l1 f-card" d="M144,124.4 C182,122.8 226,125.2 264,123.6 L265,212.4 C226,214.2 182,211.6 144,213.4 Z"/>
+            <path class="l2" d="M144,158 L265,158"/><path class="l2" d="M188,136 L222,136"/>
+          </g></g>
+
+        <g class="hs on" data-hs="h_tag_ly1"><rect class="hit" x="480" y="122" width="96" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M488,128.4 L564,127.6 L565,214.4 L489,215.2 Z" transform="rotate(-1.2 526 171)"/>
+          <text class="tx-k vert" x="512" y="140" font-size="19">洛陽伽藍記卷一</text></g></g>
+
+        <g class="hs on" data-hs="h_tag_erya"><rect class="hit" x="200" y="240" width="96" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M208,246.4 L284,245.6 L285,332.4 L209,333.2 Z" transform="rotate(1 246 289)"/>
+          <text class="tx-k vert" x="232" y="258" font-size="19">爾雅釋木</text></g></g>
+
+        <g class="hs on" data-hs="h_tag_zhushu"><rect class="hit" x="470" y="240" width="110" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M478,246.4 L566,245.6 L567,332.4 L479,333.2 Z" transform="rotate(-1 522 289)"/>
+          <text class="tx-k vert" x="502" y="258" font-size="19">爾雅注疏卷九</text></g></g>
+
+        <g class="hs on" data-hs="h_tag_shiming"><rect class="hit" x="200" y="358" width="96" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M208,364.4 L284,363.6 L285,450.4 L209,451.2 Z" transform="rotate(-1 246 407)"/>
+          <text class="tx-k vert" x="232" y="376" font-size="19">釋名卷五</text></g></g>
+
+        <g class="hs on" data-hs="h_tag_shishuo"><rect class="hit" x="460" y="358" width="120" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M468,364.4 L568,363.6 L569,450.4 L469,451.2 Z" transform="rotate(1.2 518 407)"/>
+          <text class="tx-k vert" x="494" y="376" font-size="19">世說新語紕漏</text></g></g>
+
+        <g class="hs on" data-hs="h_tag_ly5"><rect class="hit" x="200" y="478" width="96" height="100"/>
+          <g class="art"><path class="l1 f-card" d="M208,484.4 L284,483.6 L285,570.4 L209,571.2 Z" transform="rotate(1 246 527)"/>
+          <text class="tx-k vert" x="232" y="496" font-size="19">洛陽伽藍記卷五</text></g></g>
+
+        <g class="hs on" data-hs="h_blot_refill"><rect class="hit" x="470" y="486" width="130" height="92"/>
+          <g class="art">
+            <path class="l1 f-card" d="M478,494.4 L592,492.6 L594,570.4 L480,572.4 Z"/>
+            <path class="l2" d="M482,502 L588,500.4 M482,510.4 L586,508.8"/>
+            <path class="l3" d="M486,524 L564,524 M486,538 L558,538 M486,552 L564,552"/>
+          </g></g>
+        <text class="tx-k" x="620" y="562" font-size="15" fill="var(--faint)">備用吸墨紙</text>
+        <text class="tx-k" x="600" y="150" font-size="15" fill="var(--faint)">匣中舊拓</text>
+      </g>
+
+      <!-- ══════════════════ view-desk ══════════════════ -->
+      <g id="view-desk" class="view" transform="translate(120,40)">
+        <path class="l1 f-wood" d="M56,470.4 C300,468.6 700,471.2 904,469.6 L906,592.4 C700,594.2 300,591.6 56,593.4 Z"/>
+        <path class="l1 f-wood" d="M56,470.4 C300,468.6 700,471.2 904,469.6 L906,478.4 C700,480.2 300,477.6 56,479.4 Z"/>
+        <path class="l2" d="M62,470 C300,468.4 700,471 898,469.4"/>
+        <path class="l3 miter" d="M100,474.6 C300,473.4 620,475.6 860,474.2"/>
+        <!-- 案脚落在地面上（同 #view-room 的地平线），接触影一层 -->
+        <rect class="shadow" x="70" y="592" width="826" height="6" rx="3"/>
+
+        <!-- 残页甲 -->
+        <g id="leaf_jia" class="hs on" data-hs="h_leaf_jia">
+          <rect class="hit" x="112" y="104" width="284" height="352"/>
+          <g class="art">
+            <path class="l1 f-card" d="M124,116.4 C222,114.6 314,117.2 390,115.6 L392,452.4 C314,454.2 222,451.6 124,453.4 Z" transform="rotate(-2.4 258 284)"/>
+            <path class="l3" d="M146,150 L360,150 M146,168 L336,168 M146,186 L360,186"/>
+            <path class="l3" d="M146,414 L352,414 M146,430 L320,430"/>
+            <text class="tx" x="146" y="128" font-size="15" fill="var(--faint)">茶經 · 一之源</text>
+          </g>
+          <path class="l1 f-zhu sealmark" d="M296,386 L348,386 L348,438 L296,438 Z" transform="rotate(-6 322 412)"/>
+          <text class="tx sealmark" x="322" y="420" font-size="26" text-anchor="middle" fill="var(--card)">校</text>
+          <g class="ink-blot"><path style="fill:var(--zhu)" transform="translate(250,300) rotate(12)"
+             d="M0,-38 C22,-40 46,-24 44,-2 C49,20 30,42 6,40 C-18,44 -38,26 -36,2 C-40,-20 -22,-36 0,-38 Z"/>
+            <path style="fill:var(--zhu)" transform="translate(288,352)" d="M0,-13 C10,-14 18,-6 16,3 C14,12 4,16 -5,13 C-13,10 -15,0 -10,-7 C-8,-11 -4,-13 0,-13 Z"/></g>
+        </g>
+
+        <!-- 残页乙 -->
+        <g id="leaf_yi" class="hs on" data-hs="h_leaf_yi">
+          <rect class="hit" x="412" y="104" width="284" height="352"/>
+          <g class="art">
+            <path class="l1 f-card" d="M424,120.4 C522,118.6 614,121.2 690,119.6 L692,456.4 C614,458.2 522,455.6 424,457.4 Z" transform="rotate(2 558 288)"/>
+            <path class="l3" d="M446,154 L660,154 M446,172 L636,172 M446,190 L660,190"/>
+            <path class="l3" d="M446,418 L652,418 M446,434 L620,434"/>
+            <text class="tx" x="446" y="132" font-size="15" fill="var(--faint)">茶經 · 七之事</text>
+          </g>
+          <path class="l1 f-zhu sealmark" d="M596,390 L648,390 L648,442 L596,442 Z" transform="rotate(6 622 416)"/>
+          <text class="tx sealmark" x="622" y="424" font-size="26" text-anchor="middle" fill="var(--card)">異</text>
+          <g class="ink-blot"><path style="fill:var(--zhu)" transform="translate(560,310) rotate(-8)"
+             d="M0,-36 C20,-38 44,-22 42,-2 C47,20 28,40 4,38 C-20,42 -38,24 -36,0 C-40,-20 -20,-34 0,-36 Z"/>
+            <path style="fill:var(--zhu)" transform="translate(598,356)" d="M0,-12 C9,-13 17,-5 15,3 C13,12 3,15 -5,12 C-13,9 -14,0 -9,-7 C-7,-11 -4,-12 0,-12 Z"/></g>
+        </g>
+
+        <!-- 印盒 -->
+        <g class="hs on" data-hs="h_cinnabar"><rect class="hit" x="702" y="326" width="108" height="132"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M712,404.4 C736,402.8 766,405.2 794,403.6 L796,462.4 C766,464.2 736,461.6 712,463.4 Z"/>
+            <path class="l1 f-zhu" d="M722,412 L784,412 L784,440 L722,440 Z"/>
+            <path class="l1 f-card" d="M706,384 L808,382 L810,404 L708,406 Z"/>
+          </g></g>
+
+        <!-- 校印 / 異印 -->
+        <g class="hs on" data-hs="h_seal_jiao"><rect class="hit" x="716" y="278" width="88" height="90"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M740,300 L780,300 L780,344 L740,344 Z"/>
+            <path class="l2" d="M748,310 L772,310 M748,320 L772,320 M748,330 L772,330"/>
+            <path class="l2" d="M748,308 L748,336 M772,308 L772,336"/>
+            <text class="tx-k" x="760" y="292" font-size="17" text-anchor="middle">校</text>
+          </g></g>
+        <g class="hs on" data-hs="h_seal_yi"><rect class="hit" x="796" y="278" width="88" height="90"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M820,300 L860,300 L860,344 L820,344 Z"/>
+            <path class="l2" d="M828,310 L852,310 M828,320 L852,320 M828,330 L852,330"/>
+            <path class="l2" d="M828,308 L828,336 M852,308 L852,336"/>
+            <text class="tx-k" x="840" y="292" font-size="17" text-anchor="middle">異</text>
+          </g></g>
+
+        <!-- 吸墨纸 -->
+        <g id="h_blotter" class="hs on" data-hs="h_blotter"><rect class="hit" x="716" y="466" width="140" height="100"/>
+          <g class="art">
+            <path class="l1 f-card" d="M726,476.4 C766,474.8 812,477.2 848,475.6 L850,558.4 C812,560.2 766,557.6 726,559.4 Z"/>
+            <path class="l2" d="M730,486 C768,484.6 810,487 844,485.6"/>
+            <path class="l3" d="M736,502 L836,502 M736,518 L830,518 M736,534 L836,534"/>
+          </g></g>
+
+        <!-- 案面（可留永久朱砂点）：案面是水平面 → 朱砂点按 dy=-0.35·depth 压成扁椭圆 -->
+        <g class="hs on" data-hs="h_desktop"><rect class="hit" x="512" y="470" width="188" height="120"/>
+          <g class="art"><path class="l2" d="M70,566 C300,564.4 600,567 890,565.4"/></g></g>
+        <g id="desk-dots"></g>
+
+        <!-- 抽屉（抽屉是本幕第一个「世界变化」）
+             拉开后除了前脸下移（46px），腔内的两条导轨与后壁才露出来 -->
+        <g class="hs on" data-hs="h_drawer">
+          <rect class="hit" x="112" y="472" width="400" height="130"/>
+          <g class="art">
+            <g id="drawer-desk">
+              <path class="l1 f-wood rail" d="M124,506 L500,506 M124,536 L500,536"/>
+              <g id="drawer-body-desk">
+                <path class="l1 f-wood" d="M126,480.4 C250,478.6 400,481.2 502,479.6 L503,540.4 C400,542.2 250,539.6 126,541.4 Z"/>
+                <path class="l2" d="M282,510.6 C296,509.4 312,511.8 326,510.4"/>
+                <g class="drawer-plaques">
+                  <path class="l1 f-card" d="M148,492 L196,492 L196,530 L148,530 Z"/>
+                  <text class="tx-k" x="158" y="504" font-size="13">金槃十三重</text>
+                  <path class="l1 f-card" d="M218,492 L266,492 L266,530 L218,530 Z"/>
+                  <text class="tx-k" x="228" y="504" font-size="13">金盤十五重</text>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+
+        <!-- 抽屉里的两块木牌（可取走） -->
+        <g id="hs_plaque13" class="hs on gone" data-hs="h_plaque13"><rect class="hit" x="136" y="482" width="72" height="58"/>
+          <g class="art"><path class="l1 f-card" d="M146,490 L200,490 L200,532 L146,532 Z"/>
+          <text class="tx-k" x="158" y="504" font-size="14">金槃十三重</text></g></g>
+        <g id="hs_plaque15" class="hs on gone" data-hs="h_plaque15"><rect class="hit" x="212" y="482" width="72" height="58"/>
+          <g class="art"><path class="l1 f-card" d="M222,490 L276,490 L276,532 L222,532 Z"/>
+          <text class="tx-k" x="234" y="504" font-size="14">金盤十五重</text></g></g>
+
+        <text class="tx-k" x="480" y="620" font-size="14" fill="var(--faint)">點空白處 · 退回房中</text>
+      </g>
+
+      <!-- ══════════════════ view-scroll ══════════════════ -->
+      <g id="view-scroll" class="view" transform="translate(120,40)">
+        <g id="fig">
+          <path class="l1 f-card" d="M62,32.4 C300,30.6 660,33.2 898,31.6 L900,616.4 C660,618.2 300,615.6 62,617.4 Z"/>
+          <path id="frame-lift" class="l2" d="M330,32 C380,14 500,14 552,32"/>
+          <path class="l2" d="M300,560 C440,558.6 620,561 880,559.4"/>
+          <!-- 十三级木塔（层数画得清，可数） -->
+          <g id="tower" class="ns">
+            <path class="l1 f-card" id="tower-body" d=""/>
+            <g id="tower-eaves"></g>
+            <g id="tower-rings"></g>
+            <rect id="pillar" x="434" y="160" width="12" height="60" fill="var(--ink2)"/>
+          </g>
+          <!-- 固定尺标：刻度全长 = 七百尺 -->
+          <path class="l1 f-card" d="M828,80 L854,80 L854,560 L828,560 Z"/>
+          <g id="ruler-ticks"></g>
+          <text class="tx-z" x="820" y="74" font-size="20" text-anchor="end">七百尺</text>
+          <path class="l3" d="M800,80 L828,80 M800,560 L828,560"/>
+
+          <!-- 凹槽 A（视角：凹槽是一块嵌进塔图的**水平小面**，
+               槽底填 .recess 浅色，槽内一道 L3 进深线；木牌嵌进去就是盖在槽底上）
+               边上的刻字是**底本读数**「金槃十三重」—— 卷五道榮第一說逐字原文
+               （「凡十三級……金槃十三重，合去地七百尺」），与图上画出的十三级塔、
+               尺标顶端的「七百尺」是同一套数。木牌（十三重／十五重）嵌进去后
+               盖在凹槽上，读数由 #layers-text / #height-text 联动改写。 -->
+          <g class="hs on" data-hs="h_slot_layers"><rect class="hit" x="556" y="116" width="120" height="86"/>
+            <g class="art">
+              <path class="recess" d="M566,138 L646,138 L646,192 L566,192 Z"/>
+              <path class="l1 miter" d="M566,126 L646,126 L646,192 L566,192 Z" fill="none"/>
+              <path class="l3" d="M566,138 L646,138 M566,180 L646,180"/>
+            </g>
+            <g id="plaque-in-layers" class="in-slot-holder">
+              <path class="l1 f-card plaque" d="M572,132 L640,132 L640,186 L572,186 Z"/>
+              <!-- 牌面字降到 13px：五个字正好落在 68px 牌面里（原先 15px 会顶出牌沿） -->
+              <text class="tx-k plaque" id="layers-text" x="606" y="176" font-size="13" text-anchor="middle"></text>
+            </g>
+            <text class="tx-k" x="568" y="212" font-size="15">金槃十三重</text>
+          </g>
+
+          <!-- 凹槽 B：合去地（联动读数，不接收木牌）—— 空着时显示底本读数「七百尺」 -->
+          <g class="hs on" data-hs="h_slot_height"><rect class="hit" x="620" y="556" width="170" height="64"/>
+            <g class="art"><path class="l1 miter" d="M632,570 L768,570 L768,612 L632,612 Z" fill="none"/></g>
+            <text class="tx-k" id="height-text" x="628" y="562" font-size="15">合去地 七百尺</text>
+          </g>
+        </g>
+
+        <!-- 尺标底座 · 暗格（视角：暗格盖是一块**水平面**，掀开 13px 后
+             看得见格的底面进深 —— .secret-cavity 淡入） -->
+        <g id="secret" class="hs on" data-hs="h_secret">
+          <rect class="hit" x="796" y="540" width="110" height="86"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M802,566 L896,566 L896,614 L802,614 Z"/>
+            <path class="l2" d="M802,584 L896,584"/>
+          </g>
+          <g class="secret-cavity">
+            <path class="recess" d="M806,576 L892,576 L892,608 L806,608 Z"/>
+            <path class="l2 miter" d="M806,576 L806,608 M892,576 L892,608"/>
+            <path class="l3 miter" d="M818,577 L818,607 M862,577 L862,607"/>
+          </g>
+          <g class="secret-in">
+            <path class="l1 f-card" d="M818,580 L882,580 L882,610 L818,610 Z"/>
+            <text class="tx-k" x="850" y="600" font-size="12" text-anchor="middle">卷十</text>
+          </g>
+          <g id="secret-lid"><path class="l1 f-wood" d="M800,556 L898,556 L898,568 L800,568 Z"/>
+            <path class="l3" d="M800,566 L898,566"/></g>
+        </g>
+        <!-- 营造图本体：可放「卷一旧拓」试摆第三说（支线 S2） -->
+        <g class="hs on" data-hs="h_scroll_fig">
+          <rect class="hit" x="72" y="42" width="468" height="500" fill="transparent"/>
+          <g class="art"><path class="l1" d="M62,32.4 C300,30.6 660,33.2 898,31.6 L900,616.4 C660,618.2 300,615.6 62,617.4 Z"/></g>
+        </g>
+        <text class="tx-k" x="440" y="656" font-size="14" fill="var(--faint)">點空白處 · 退回房中</text>
+      </g>
+
+      <!-- ══════════════════ view-right：横木三签 + 柜内三件平摊 ══════════════════
+           视角：同 #view-room（轻斜投影 dy = -0.35·depth）。
+           柜内三格的「隔板」从此是**看得见的水平面**：板面 dy=9 + 板厚前棱 dy=3，
+           再加上两壁的进深面（x=172–183 / x=749–760）与柜底里档，
+           柜子读起来是一个「有进深的暗腔」，而不是三格贴纸 -->
+      <g id="view-right" class="view" transform="translate(120,40)">
+        <!-- D 横木三签（顺序固定为 心衣 / 帕腹 / 抱腹，与书序不同） -->
+        <path class="l1 f-wood" d="M96,16.4 C300,14.6 660,17.2 864,15.6 L865,38.4 C660,40.2 300,37.6 96,39.4 Z"/>
+        <g id="tag_xinyi" class="hs on" data-hs="h_tag_xinyi"><rect class="hit" x="146" y="38" width="118" height="140"/>
+          <g class="art"><path class="l1 f-card" d="M172,44 L238,44 L238,144 L172,144 Z"/>
+          <text class="tx-k vert" x="196" y="56" font-size="24">心衣</text></g>
+          <circle class="l2" cx="205" cy="160" r="6" fill="none"/>
+          <circle class="l3 placed-dot" cx="205" cy="178" r="4" fill="var(--zhu)" style="stroke:none" opacity="0"/></g>
+        <g id="tag_pafu" class="hs on" data-hs="h_tag_pafu"><rect class="hit" x="388" y="38" width="118" height="140"/>
+          <g class="art"><path class="l1 f-card" d="M414,44 L480,44 L480,144 L414,144 Z"/>
+          <text class="tx-k vert" x="438" y="56" font-size="24">帕腹</text></g>
+          <circle class="l2" cx="447" cy="160" r="6" fill="none"/>
+          <circle class="l3 placed-dot" cx="447" cy="178" r="4" fill="var(--zhu)" style="stroke:none" opacity="0"/></g>
+        <g id="tag_baofu" class="hs on" data-hs="h_tag_baofu"><rect class="hit" x="630" y="38" width="118" height="140"/>
+          <g class="art"><path class="l1 f-card" d="M656,44 L722,44 L722,144 L656,144 Z"/>
+          <text class="tx-k vert" x="680" y="56" font-size="24">抱腹</text></g>
+          <circle class="l2" cx="689" cy="160" r="6" fill="none"/>
+          <circle class="l3 placed-dot" cx="689" cy="178" r="4" fill="var(--zhu)" style="stroke:none" opacity="0"/></g>
+
+        <!-- E 高柜（柜门两扇向外转开 900ms）
+             层序：① 柜体 →② 柜门 →③ 内腔凹面 + 两壁进深面 + 隔板/底里档 →④ 衣物
+             **结构（模板附录 A.5 坑 1）**：柜体热区 `h_cabinet_inside` 只包「柜体 +
+             内腔」这一层，**不再包**三件衣物与内衬纸头 —— 早先四件都是它的后代，
+             探针报「.hs 嵌套 .hs = 4」。衣物/纸头与柜门现在是它的**兄弟**，
+             文档顺序不变（先柜体、再衣物、最后门），所以画上去的样子与命中 z 序一字未变；
+             柜门 `pointer-events:none`（它只是柜体的面板，点它仍走下面那张柜体热区）。 -->
+        <g class="hs on" data-hs="h_cabinet_inside">
+          <!-- 热区只做「柜体下沿」这一条：整张柜体面上的中心正被抱腹的活热区压着
+               （真鼠标点柜体中心 = 取抱腹，这是前景物件该赢的），把整面热区的
+               中心让出来，柜体自己就重新点得动；柜内三件衣物、纸头本来就是
+               各自独立的活热区（点它们也开柜）。 -->
+          <rect class="hit" x="140" y="594" width="680" height="34"/>
+          <g class="art">
+            <path class="l1 f-wood" d="M148,172.4 C340,170.6 600,173.2 812,171.6 L814,626.4 C600,628.2 340,625.6 148,627.4 Z"/>
+            <path class="l1 miter" d="M188,196.4 C360,194.8 590,197.2 772,195.6 L774,604.4 C590,606.2 360,603.6 188,605.4 Z"/>
+          </g>
+          <!-- ③ 柜内三格 · 三件衣物平摊（与 view-cabinet 样张同一组路径，一字未动）
+               层序：内腔凹面 + 两壁进深面 → 衣物 → 隔板（盖住衣物下沿）→ 柜门（最后） -->
+          <g class="drawer-cavity">
+            <path class="recess" d="M172,220 L760,220 L760,554 L172,554 Z"/>
+            <path class="l1 f-card" d="M172,220 L183,220 L183,554 L172,554 Z"/>
+            <path class="l1 f-card" d="M760,220 L749,220 L749,554 L760,554 Z"/>
+            <path class="l3 miter" d="M183,220 L183,554 M749,220 L749,554"/>
+            <path class="l3 miter" d="M190,470 C360,468.6 590,471 772,469.6 M190,492 C360,490.6 590,493 772,491.6"/>
+            <path class="recess" d="M190,554 C360,552.4 590,554.8 772,553.4 L772,568 L190,568 Z"/>
+            <path class="l3 miter" d="M190,562 L772,562"/>
+            <!-- 门缝铜搭扣：画在「腔口前」的那一层（门开后才露出来） -->
+            <path class="l2" d="M470,386 L470,414 M498,386 L498,414 M466,382 L502,382 L502,418 L466,418 Z"/>
+            <circle class="l2" cx="484" cy="400" r="6" fill="none"/>
+          </g>
+        </g>
+        <g class="cab-inner ns">
+          <g id="hsg_c" class="hs on" data-hs="h_garment_c">
+            <rect class="hit" x="330" y="100" width="300" height="146"/>
+            <g class="art"><g id="scene_g_c"></g></g>
+          </g>
+          <g id="hsg_b" class="hs on" data-hs="h_garment_b">
+            <rect class="hit" x="282" y="247" width="396" height="142"/>
+            <g class="art"><g id="scene_g_b"></g></g>
+          </g>
+          <g id="hsg_a" class="hs on" data-hs="h_garment_a">
+            <rect class="hit" x="232" y="408" width="496" height="126"/>
+            <g class="art"><g id="scene_g_a"></g></g>
+          </g>
+          <!-- 三块隔板：板面（水平面，d=10）+ 板厚前棱（d=4）。画在衣物之后＝盖住下沿 -->
+          <g class="drawer-cavity">
+            <path class="slab" d="M186,532 C360,530.4 590,532.8 774,531.4 L774,542 C590,543.4 360,541 186,542.6 Z"/>
+            <path class="l1 f-card" d="M186,542 C360,540.4 590,542.8 774,541.4 L774,546.4 C590,547.8 360,545.4 186,547 Z"/>
+            <rect class="shadow" x="300" y="543" width="200" height="5" rx="2.5"/>
+            <path class="l3 miter" d="M300,535 L300,541 M660,534 L660,540"/>
+            <path class="slab" d="M186,376 C360,374.4 590,376.8 774,375.4 L774,386 C590,387.4 360,385 186,386.6 Z"/>
+            <path class="l1 f-card" d="M186,386 C360,384.4 590,386.8 774,385.4 L774,390.4 C590,391.8 360,389.4 186,391 Z"/>
+            <rect class="shadow" x="262" y="387" width="252" height="5" rx="2.5"/>
+            <path class="l3 miter" d="M300,379 L300,385 M660,378 L660,384"/>
+            <path class="slab" d="M186,228 C360,226.4 590,228.8 774,227.4 L774,238 C590,239.4 360,237 186,238.6 Z"/>
+            <path class="l1 f-card" d="M186,238 C360,236.4 590,238.8 774,237.4 L774,242.4 C590,243.8 360,241.4 186,243 Z"/>
+            <rect class="shadow" x="322" y="239" width="180" height="5" rx="2.5"/>
+            <path class="l3 miter" d="M300,231 L300,237 M660,230 L660,236"/>
+          </g>
+          <!-- 心衣内衬接缝处的一角纸头（三件全归位后淡入） -->
+          <g id="lining" class="hs on" data-hs="h_lining_slip">
+            <rect class="hit" x="430" y="310" width="90" height="72"/>
+            <g class="art"><path class="l1 f-card" d="M444,316 L512,314 L514,372 L446,374 Z" transform="rotate(-6 478 344)"/>
+            <path class="l3" d="M454,332 L504,330 M454,342 L500,340 M454,352 L504,350"/></g>
+          </g>
+        </g>
+        <!-- 柜门（闭合时遮住内腔；开启后向两侧收拢到柜体之外；最后画故在最前）
+             每扇门自己带一条 **门板厚度面**（.door-edge）＝开门时看得见「门板有多厚」。
+             门板**内框**改成一道「板面」平涂（--paper2，既有水平面用色）：修前它是一块
+             11%（256×372）只有描边的闭环，自动检出判为「没画完的大空框」。 -->
+        <g class="door door-l" style="transform-origin:196px 398px">
+          <path class="l1 f-wood" d="M196,196 L484,196 L484,600 L196,600 Z"/>
+          <path class="l2" d="M212,212 L468,212 L468,584 L212,584 Z" style="fill:var(--paper2)"/>
+          <path class="l1 f-card door-edge" d="M484,196 L484,600 L490,596 L490,200 Z"/>
+        </g>
+        <g class="door door-r" style="transform-origin:772px 398px">
+          <path class="l1 f-wood" d="M484,196 L772,196 L772,600 L484,600 Z"/>
+          <path class="l2" d="M500,212 L756,212 L756,584 L500,584 Z" style="fill:var(--paper2)"/>
+          <path class="l1 f-card door-edge" d="M484,196 L484,600 L478,596 L478,200 Z"/>
+        </g>
+        <text class="tx-k" x="360" y="656" font-size="14" fill="var(--faint)">點空白處 · 退回房中</text>
+      </g>
+
+      <!-- ══════════════════ 值房台账（外壳：进入房间的入口，不是「开始」）══════════════════ -->
+      <g id="ledger" class="on">
+        <rect x="0" y="0" width="1200" height="720" fill="var(--paper)"/>
+        <g class="art">
+          <path class="l1 f-wood" d="M262,92.4 C480,90.6 720,93.2 938,91.6 L940,628.4 C720,630.2 480,627.6 262,629.4 Z"/>
+          <path class="l1 f-card" d="M286,116.4 C480,114.8 720,117.2 914,115.6 L916,604.4 C720,606.2 480,603.6 286,605.4 Z"/>
+          <path class="l2" d="M300,196 C480,194.4 720,197 900,195.4"/>
+          <path class="l2" d="M300,448 C480,446.4 720,449 900,447.4"/>
+        </g>
+        <text class="led-lede" x="600" y="160" text-anchor="middle">值房 · 今日差事</text>
+        <text class="led-sub" x="600" y="182" text-anchor="middle">典藏司 校書閣 · 夜直</text>
+
+        <g id="led-items">
+          <circle id="led-dot-1" class="l2" cx="356" cy="248" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-1" x="390" y="255">校《茶經》殘頁二紙，落印歸卷</text>
+          <circle id="led-dot-2" class="l2" cx="356" cy="322" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-2" x="390" y="329">庫中舊衣物三件，按名歸位</text>
+          <circle id="led-dot-3" class="l2" cx="356" cy="396" r="8" fill="none"/>
+          <text class="led-item" id="led-tx-3" x="390" y="403">勘《洛陽伽藍記》卷五兩說</text>
+        </g>
+
+        <g class="hs on" data-hs="h_ledger_enter">
+          <rect class="hit" x="330" y="470" width="540" height="72"/>
+          <g class="art"><path class="l1 miter" d="M336,476 L864,476 L864,536 L336,536 Z" fill="none"/></g>
+          <text class="led-act" x="600" y="518" text-anchor="middle">推 門 入 閣</text>
+        </g>
+        <g id="hs_led_notes" class="hs on gone" data-hs="h_ledger_notes">
+          <rect class="hit" x="330" y="548" width="540" height="72"/>
+          <g class="art">
+            <path class="l1 miter" d="M336,554 L864,554 L864,614 L336,614 Z" fill="none"/>
+            <text class="led-act" x="600" y="596" text-anchor="middle" font-size="18">取 閱 校 勘 記</text>
+          </g>
+        </g>
+        <text class="led-hint" id="led-hint" x="600" y="664" text-anchor="middle">房裡沒有題目 —— 只有一櫃舊衣物、兩頁殘紙、一幅塔圖、一枚朱砂印。</text>
+      </g>
+
+      <!-- ══════════════════ 纸：在场景内放大展开，不切屏 ══════════════════ -->
+      <g id="paper-layer"></g>
+
+      <!-- 声（不用喇叭图标，破坏画面） -->
+      <g id="snd" style="cursor:pointer">
+        <rect x="1136" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1158" y="50" font-size="19" text-anchor="middle">聲</text>
+      </g>
+      <!-- 簿（回台账） -->
+      <g id="bk" style="cursor:pointer">
+        <rect x="1084" y="20" width="44" height="44" fill="transparent"/>
+        <text class="tx-k" x="1106" y="50" font-size="19" text-anchor="middle">簿</text>
+      </g>
+    </g>
+  </svg>
+
+  <div id="hud">
+    <div id="slots"></div>
+    <div id="caption"></div>
+  </div>
+</div>
+
+<svg id="symdefs" width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="symroot"></defs></svg>
+
+<script>
+"use strict";
+(function(){
+/* ═══════════════════════════════════════════════════════════════
+   典藏司 · 校書閣 · 第一幕切片
+   引文一律逐字取自《考据样题_第一批.md》已在线核实段（每条附 URL 见 实现说明.md §引文）
+   规格以《锈湖式设计稿.md》为准
+   ═══════════════════════════════════════════════════════════════ */
+
+var SAVE_KEY = "diandangsi.rustylake.v1";
+
+/* ── 1. 引文（逐字；繁体底本；不转简体）──────────────────────── */
+var PAPERS = {
+  p_jia:{ t:"茶經 · 一之源", s:"殘頁甲 · 小注（大字正文未撕下）", zhu:false,
+    body:["周公云︰「檟、苦荼。」",
+          "揚執戟云︰「蜀西南人謂茶曰蔎。」",
+          "郭弘農云︰「早取爲荼，晚取爲茗，或一曰荈耳。」"],
+    keys:["荼"] },
+  p_yi:{ t:"茶經 · 七之事", s:"殘頁乙 · 引郭璞《爾雅注》", zhu:false,
+    body:["郭璞《爾雅注》云︰『樹小似梔子，冬生，葉可煮羹飲。今呼早取爲茶，晚取爲茗，或一曰荈，蜀人名之苦茶。』"],
+    keys:["茶"] },
+  p_rule:{ t:"校印之例", s:"貼於窗下 · 值房", zhu:true,
+    body:["凡與所引本書合者，用「校」。","字有增改者，用「異」。"],
+    keys:[] },
+  p_erya:{ t:"爾雅 · 釋木", s:"正文", zhu:false,
+    body:["檟，苦荼。"], keys:["荼"] },
+  p_zhushu:{ t:"爾雅注疏 · 卷九", s:"郭璞注", zhu:false,
+    body:["樹小似梔子，冬生葉可煮作羹飲。今呼早采者為荼，晚取者為茗。一名荈，蜀人名之苦荼。"],
+    keys:["荼"] },
+  p_shiming:{ t:"釋名 · 卷五 · 釋衣服第十六", s:"三條連排", zhu:false,
+    body:["禰襠，其一當胸，其一當背也。",
+          "帕腹，橫帕其腹也。",
+          "抱腹，上下有帶，抱裹其腹，上無襠者也。",
+          "心衣，抱腹而施鉤肩，鉤肩之間，施一襠以奄心也。"],
+    keys:["帶","鉤肩","襠"] },
+  p_shishuo:{ t:"世說新語 · 紕漏第三十四", s:"任育長條（支線 S1）", zhu:false,
+    body:["任育長年少時，甚有令名。武帝崩，選百二十挽郎，一時之秀彥，育長亦在其中。王安豐選女壻，從挽郎搜其勝者，且擇取四人，任猶在其中。童少時神明可愛，時人謂育長影亦好。自過江，便失志。王丞相請先度時賢共至石頭迎之，猶作疇日相待，一見便覺有異。坐席竟，下飲，便問人云：「此為茶？為茗？」覺有異色，乃自申明云：「向問飲為熱，為冷耳。」嘗行從棺邸下度，流涕悲哀。王丞相聞之曰：「此是有情癡。」"],
+    keys:["覺有異色","乃自申明","年少時，甚有令名"] },
+  p_ly5:{ t:"洛陽伽藍記 · 卷五", s:"雀離浮圖 · 道榮第一說", zhu:false,
+    body:["道榮云其高三丈，悉用文木為陛階砌櫨拱上搆衆木，凡十三級，上有鐵柱髙三尺，金槃十三重，合去地七百尺。"],
+    keys:["十三級","三尺","十三重","七百尺"] },
+  p_ly1:{ t:"洛陽伽藍記 · 卷一", s:"永寧寺塔 · 舊拓（支線 S2）", zhu:false,
+    body:["中有九層浮圖一所，架木為之，舉髙九十丈，有剎復髙十丈，合去地一千尺。"],
+    keys:["九層","一千尺"] },
+  p_slip2:{ t:"卷五 · 半段殘紙", s:"心衣內襯接縫處取出", zhu:false,
+    body:["道榮云鐵柱八十八尺八十圍，金盤十五重，去地六十三丈二尺。"],
+    keys:["八十八尺","十五重","六十三丈二尺"] },
+  p_tea7side:{ t:"茶經 · 七之事（第四張殘頁）", s:"支線 S1 所得 · 陸羽引《世說》段", zhu:false,
+    body:["《世說》：「任瞻，字育長，少時有令名，自過江失志。既下飲，問人云：『此爲茶？爲茗？』覺人有恠色，乃自分明云：『向問飲爲熱爲冷？』」"],
+    keys:["覺人有恠色","乃自分明","字育長","少時有令名"] }
+};
+
+/* ── 2. 衣物几何（与 view-cabinet 样张同一组路径；单一来源）────── */
+var G = {
+  a:{ box:[238,410,486,132],
+      d:["M242,415.4 C360,413.6 600,416.8 718,414.8 L720,530.6 C600,532.4 360,529.4 242,531.2 Z"] },
+  b:{ box:[288,251,384,135],
+      d:["M292,274.4 C400,272.6 560,275.2 668,273.6 L670,363.4 C560,365.2 400,362.6 292,364.4 Z",
+         "M293,273.6 L292.6,256 L311.6,255.4 L312,273.2 Z",
+         "M648,273.2 L648.4,255.4 L667.4,256 L667,273.6 Z",
+         "M293,364.4 L292.6,382 L311.6,382.6 L312,364.8 Z",
+         "M648,364.8 L648.4,382.6 L667.4,382 L667,364.4 Z"] },
+  c:{ box:[336,100,288,138],
+      d:["M342,139.6 C420,137.8 540,140.4 618,138.6 L620,232.6 C540,234.4 420,231.8 342,233.4 Z",
+         "M356,139 C352,116 360,104 378,104 C396,104 404,116 400,139 L386,139 C389,121 384,115 378,115 C372,115 367,121 370,139 Z",
+         "M604,139 C608,116 600,104 582,104 C564,104 556,116 560,139 L574,139 C571,121 576,115 582,115 C588,115 593,121 590,139 Z"],
+      patch:"M449,113.4 C470,112.2 490,114.2 511,112.8 L511.6,175 C490,176.2 470,174.4 449.2,175.6 Z" }
+};
+
+/* ── 3. 物件表（id / symbolId / fromScene / toTargets / consumed）── */
+var ITEMS = {
+  it_seal_jiao:{ n:"「校」印", sym:"sym_seal_jiao", box:[-4,16,108,72] },
+  it_seal_yi:  { n:"「異」印", sym:"sym_seal_yi",   box:[-4,16,108,72] },
+  it_blotter:  { n:"吸墨紙",   sym:"sym_blotter",   box:[4,10,92,80] },
+  it_plaque_13:{ n:"金槃十三重", sym:"sym_plaque_13", box:[-4,8,108,86] },
+  it_plaque_15:{ n:"金盤十五重", sym:"sym_plaque_15", box:[-4,8,108,86] },
+  it_garment_a:{ n:"帕腹（窄長橫帶）", sym:"sym_g_a", box:[-10,26,120,50] },
+  it_garment_b:{ n:"抱腹（橫布加四帶）", sym:"sym_g_b", box:[-6,20,112,60] },
+  it_garment_c:{ n:"心衣（鉤肩加方襠）", sym:"sym_g_c", box:[-4,14,108,76] },
+  it_rubbing:  { n:"卷一舊拓", sym:"sym_rubbing", box:[2,8,96,84] },
+  it_slip2:    { n:"半段殘紙", sym:"sym_slip2",   box:[-4,16,108,70] },
+  it_vol10:    { n:"第十卷封皮", sym:"sym_vol10", box:[-4,16,108,72] }
+};
+
+/* ── 4. flags（§4.3 表；存档只存这张表 + 物品栏 + 已读页）──────── */
+var FLAG_KEYS = ["f_seen_room","f_shelf_opened","f_read_erya_shimu","f_read_erya_zhushu09",
+  "f_read_shiming5","f_read_tea1","f_read_tea7","f_leaf_jia_sealed","f_leaf_yi_sealed",
+  "f_leaf_jia_smudged","f_leaf_yi_smudged","f_chain1_done","f_drawer_open",
+  "f_plaque13_taken","f_plaque15_taken","f_cabinet_open","f_cloth_used",
+  "f_garment_a_placed","f_garment_b_placed","f_garment_c_placed",
+  "f_chain2_done","f_slip2_taken","f_fig_slot_13","f_fig_slot_15","f_fig_slot_1000",
+  "f_chain3_done","f_secret_open","f_vol10_taken","f_act1_done",
+  "f_side_shishuo_read","f_side_rubbing_taken","f_side_window","f_side_tea7"];
+var F = {}, INV = [], READ = [], SEL = null, CAM = "room";
+
+function resetState(){
+  F = {}; FLAG_KEYS.forEach(function(k){ F[k]=false; });
+  F.f_blot_count = 2; F.f_blot_refilled = false; F.f_misplaced_count = 0;
+  INV = []; READ = []; SEL = null; CAM = "room";
+}
+
+/* ── 5. 存读档 ─────────────────────────────────────────────── */
+/* 本幕号：写进存档的 act，与文件名/协议 §2.6 一致。
+   名字故意不叫 ACT —— 下面「热点行为」那张表已经占用了 `ACT`（动作表），
+   同名会让 `act` 存进一个对象（本班实测存出来正是 "[object Object]"）。 */
+var SAVE_ACT = 1;
+var saveT = null;
+function saveNow(){
+  try{
+    /* 只加不改：先取回桶里已有的 done / notes（前几幕写的），本幕不删、不改写别人的键 */
+    var prev = null;
+    try{ prev = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); }catch(e0){ prev = null; }
+    var o = { f:F, inv:INV, read:READ, cam:CAM, ts:Date.now(), act:SAVE_ACT };
+    o.done  = (prev && prev.done  && prev.done.slice)  ? prev.done.slice(0)  : [];
+    o.notes = (prev && prev.notes && prev.notes.slice) ? prev.notes.slice(0) : [];
+    if(F.f_act1_done && o.done.indexOf("act1") < 0) o.done.push("act1");   /* 幂等 */
+    localStorage.setItem(SAVE_KEY, JSON.stringify(o));
+  }catch(e){ /* 隐私模式：静默降级为内存态 */ }
+}
+function saveDebounced(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
+function load(){
+  try{
+    var raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var o = JSON.parse(raw);
+    if(!o || !o.f) return false;
+    FLAG_KEYS.forEach(function(k){ if(k in o.f) F[k]=o.f[k]; });
+    if(typeof o.f.f_blot_count === "number") F.f_blot_count = o.f.f_blot_count;
+    if(typeof o.f.f_misplaced_count === "number") F.f_misplaced_count = o.f.f_misplaced_count;
+    INV = o.inv || []; READ = o.read || []; CAM = o.cam || "room";
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ── 6. DOM ───────────────────────────────────────────────── */
+var $ = function(s){ return document.querySelector(s); };
+var stage = $("#stage"), world = $("#world"), paperLayer = $("#paper-layer");
+var caption = $("#caption"), slotsEl = $("#slots");
+
+function el(tag, attrs, kids){
+  var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  if(attrs) for(var k in attrs) n.setAttribute(k, attrs[k]);
+  if(kids) kids.forEach(function(c){ n.appendChild(c); });
+  return n;
+}
+function mkPath(cls, d){ return el("path", { "class":cls, d:d }); }
+
+/* ── 7. 注入衣物几何 + 木塔 + 尺标刻度 + 物品栏 symbol ─────────── */
+function injectGarments(){
+  function put(host, key){
+    var g = document.getElementById(host), spec = G[key];
+    spec.d.forEach(function(d,i){ g.appendChild(mkPath(i===0?"l1 f-card":"l1 f-card", d)); });
+    if(spec.patch) g.appendChild(mkPath("l1 f-zhu", spec.patch));
+  }
+  put("scene_g_c","c"); put("scene_g_b","b"); put("scene_g_a","a");
+  // symbol 版本已在 buildSymbols() 里用同一组 G 路径生成，此处不重复注入
+}
+function buildTower(){
+  var cx=440, yBase=560, yBodyTop=160, yApex=80, n=13, h=(yBase-yBodyTop)/n;
+  $("#tower-body").setAttribute("d",
+    "M"+(cx-58)+","+yBase+" C"+(cx-58)+","+(yBase-120)+" "+(cx-30)+","+(yBodyTop+40)+" "+(cx-26)+","+yBodyTop+
+    " L"+(cx+26)+","+yBodyTop+" C"+(cx+30)+","+(yBodyTop+40)+" "+(cx+58)+","+(yBase-120)+" "+(cx+58)+","+yBase+" Z");
+  var eaves = $("#tower-eaves"), rings = $("#tower-rings");
+  function halfAt(y){ var t=(yBase-y)/(yBase-yBodyTop); return 86+(34-86)*t; }
+  for(var i=1;i<=n;i++){
+    var y = yBase - i*h, hw = halfAt(y);
+    eaves.appendChild(mkPath("l2",
+      "M"+(cx-hw-20).toFixed(1)+","+(y-11).toFixed(1)+
+      " C"+(cx-hw-10).toFixed(1)+","+(y-3).toFixed(1)+" "+(cx-hw-4).toFixed(1)+","+y.toFixed(1)+" "+(cx-hw).toFixed(1)+","+y.toFixed(1)+
+      " L"+(cx+hw).toFixed(1)+","+y.toFixed(1)+
+      " C"+(cx+hw+4).toFixed(1)+","+y.toFixed(1)+" "+(cx+hw+10).toFixed(1)+","+(y-3).toFixed(1)+" "+(cx+hw+20).toFixed(1)+","+(y-11).toFixed(1)));
+  }
+  for(var j=1;j<=15;j++){
+    var ry = yBodyTop - j*((yBodyTop-yApex)/15), rw = 32 - (j-1)*(18/14);
+    var cls = "l2" + (j===14?" ring14":"") + (j===15?" ring15":"");
+    rings.appendChild(mkPath(cls, "M"+(cx-rw).toFixed(1)+","+ry.toFixed(1)+" L"+(cx+rw).toFixed(1)+","+ry.toFixed(1)));
+  }
+  var ticks = $("#ruler-ticks"), y0=560, per=480/700;
+  for(var k=1;k<=14;k++){
+    var yy = y0 - k*50*per, long = (k%2===0);
+    ticks.appendChild(mkPath("l3", "M"+(long?814:822)+","+yy.toFixed(1)+" L828,"+yy.toFixed(1)));
+  }
+}
+function buildSymbols(){
+  var root = $("#symroot");
+  function sym(id, viewBox, kids){
+    var s = el("symbol", { id:id, viewBox:viewBox });
+    kids.forEach(function(k){ s.appendChild(k); });
+    root.appendChild(s);
+  }
+  // 印（同一 symbol，只换印面刻字）
+  ["jiao:校","yi:異"].forEach(function(p){
+    var a=p.split(":"), L=[];
+    L.push(el("rect",{x:32,y:14,width:36,height:44,"class":"x1",fill:"#b9a88c",stroke:"#2a2622","stroke-width":2.2,rx:2}));
+    L.push(el("path",{d:"M38,24 L62,24 M38,32 L62,32 M38,40 L62,40 M38,22 L38,46 M62,22 L62,46",fill:"none",stroke:"#5c554b","stroke-width":1.4,"stroke-linecap":"round"}));
+    var t=el("text",{x:50,y:64,"font-size":17,"text-anchor":"middle",fill:"#2a2622",
+      "font-family":"Kaiti SC,STKaiti,KaiTi,serif"}); t.textContent=a[1];
+    L.push(el("path",{d:"M36,60 L64,60",fill:"none",stroke:"#2a2622","stroke-width":2.2,"stroke-linecap":"round"}));
+    L.push(t);
+    sym("sym_seal_"+a[0], "0 0 100 100", L);
+  });
+  sym("sym_blotter","0 0 100 100",[
+    el("rect",{x:16,y:26,width:68,height:52,fill:"#faf6ec",stroke:"#2a2622","stroke-width":2.2,rx:2}),
+    el("path",{d:"M16,38 L84,38",fill:"none",stroke:"#5c554b","stroke-width":1.4}),
+    el("path",{d:"M26,52 L74,52 M26,62 L68,62",fill:"none",stroke:"#8d8577","stroke-width":0.9})]);
+  [["sym_plaque_13","金槃十三重"],["sym_plaque_15","金盤十五重"]].forEach(function(p){
+    sym(p[0],"0 0 100 100",[
+      el("rect",{x:14,y:10,width:72,height:80,fill:"#faf6ec",stroke:"#2a2622","stroke-width":2.2,rx:2}),
+      (function(){ var t=el("text",{x:50,y:58,"font-size":19,"text-anchor":"middle",fill:"#2a2622",
+        "font-family":"Kaiti SC,STKaiti,KaiTi,serif"}); t.textContent="重"; return t; })(),
+      (function(){ var t=el("text",{x:50,y:30,"font-size":11,"text-anchor":"middle",fill:"#5c554b",
+        "font-family":"Kaiti SC,STKaiti,KaiTi,serif"}); t.textContent=p[1].slice(0,2); return t; })()]);
+  });
+  // 衣物缩略图：复用同一组路径（单一来源）
+  [["sym_g_a","a"],["sym_g_b","b"],["sym_g_c","c"]].forEach(function(p){
+    var spec = G[p[1]], L = [];
+    spec.d.forEach(function(d){ L.push(el("path",{d:d,fill:"#faf6ec",stroke:"#2a2622",
+      "stroke-width":2.2,"stroke-linejoin":"round","stroke-linecap":"round"})); });
+    if(spec.patch) L.push(el("path",{d:spec.patch,fill:"#a63a2a",stroke:"#2a2622",
+      "stroke-width":2.2,"stroke-linejoin":"round"}));
+    sym(p[0], spec.box.join(" "), L);
+  });
+  sym("sym_rubbing","0 0 100 100",[
+    el("rect",{x:14,y:12,width:72,height:76,fill:"#faf6ec",stroke:"#2a2622","stroke-width":2.2,rx:2}),
+    el("path",{d:"M26,66 L26,50 M38,66 L38,38 M50,66 L50,30 M62,66 L62,44 M74,66 L74,54",
+      fill:"none",stroke:"#5c554b","stroke-width":1.4,"stroke-linecap":"round"}),
+    el("path",{d:"M20,72 L80,72",fill:"none",stroke:"#2a2622","stroke-width":2.2,"stroke-linecap":"round"})]);
+  sym("sym_slip2","0 0 100 100",[
+    el("path",{d:"M14,20 L86,16 L84,84 L16,80 Z",fill:"#faf6ec",stroke:"#2a2622","stroke-width":2.2,"stroke-linejoin":"round"}),
+    el("path",{d:"M24,36 L74,34 M24,48 L70,46 M24,60 L74,58",fill:"none",stroke:"#8d8577","stroke-width":0.9})]);
+  sym("sym_vol10","0 0 100 100",[
+    el("rect",{x:18,y:22,width:64,height:56,fill:"#faf6ec",stroke:"#2a2622","stroke-width":2.2,rx:2}),
+    el("path",{d:"M18,32 L82,32 M18,68 L82,68",fill:"none",stroke:"#5c554b","stroke-width":1.4})]);
+}
+
+/* ── 8. 物品栏 ─────────────────────────────────────────────── */
+function renderInv(){
+  slotsEl.innerHTML = "";
+  for(var i=0;i<8;i++){
+    var id = INV[i], d = document.createElement("div");
+    d.className = "slot" + (id?" has":"") + (id&&id===SEL?" sel":"");
+    d.dataset.slot = i;
+    if(id){
+      var it = ITEMS[id], ttl = document.createElement("title"); ttl.textContent = it.n;
+      d.appendChild(ttl);
+      var svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svg.setAttribute("viewBox","0 0 100 100");
+      var u = document.createElementNS("http://www.w3.org/2000/svg","use");
+      u.setAttribute("href","#"+it.sym);
+      u.setAttribute("x", it.box[0]); u.setAttribute("y", it.box[1]);
+      u.setAttribute("width", it.box[2]); u.setAttribute("height", it.box[3]);
+      svg.appendChild(u); d.appendChild(svg);
+    } else {
+      var un = document.createElement("div"); un.className = "under"; d.appendChild(un);
+    }
+    slotsEl.appendChild(d);
+  }
+}
+slotsEl.addEventListener("click", function(e){
+  var s = e.target.closest ? e.target.closest(".slot") : null;
+  if(!s || !s.dataset.slot) return;
+  var id = INV[+s.dataset.slot];
+  if(!id) return;
+  SEL = (SEL === id) ? null : id;
+  renderInv(); applyArmed(); if(SEL) bumpBreathe(SEL);
+});
+
+function give(id){ if(INV.indexOf(id)<0){ INV.push(id); } renderInv(); }
+function takeAway(id){ var i=INV.indexOf(id); if(i>=0) INV.splice(i,1);
+  if(SEL===id){ SEL=null; } renderInv(); applyArmed(); }
+
+/* ── 9. 环境文字（不是题目框）─────────────────────────────── */
+var capT = null;
+function say(txt, zhu, ms){
+  caption.textContent = txt;
+  caption.classList.toggle("zhu", !!zhu);
+  caption.classList.add("on");
+  clearTimeout(capT);
+  if(ms !== 0) capT = setTimeout(function(){ caption.classList.remove("on"); }, ms||2600);
+}
+
+/* ── 9b. 值房台账（外壳：进入房间的入口）────────────────────── */
+var LEDGER = true;
+/* 台账（本幕没有幕间过渡页，所以只有这一个覆盖层）压着时给 #world 挂 .modal：
+   底下场景整棵 pointer-events:none!important，看不见的 .hit 不再截走点击。
+   三个调用点：showLedger() / boot()（起手 #ledger 就写在标记里是 class="on"）
+   —— 本幕没有 openBridge()/closeBridge()，将来加幕间页时按附录 A.4 补两处。 */
+function syncModal(){
+  world.classList.toggle("modal", $("#ledger").classList.contains("on"));
+}
+function showLedger(on){
+  LEDGER = !!on;
+  $("#ledger").classList.toggle("on", LEDGER);
+  if(LEDGER) closePaperQuiet();
+  syncModal();
+}
+function renderLedger(){
+  var done = [F.f_chain1_done, F.f_chain2_done, F.f_chain3_done];
+  for(var i=0;i<3;i++){
+    var dot = document.getElementById("led-dot-"+(i+1));
+    var tx  = document.getElementById("led-tx-"+(i+1));
+    if(!dot) continue;
+    // 状态用「墨圈 / 朱点」表示，不写数字、不做进度条
+    if(done[i]){ dot.setAttribute("fill","var(--zhu)"); dot.setAttribute("r","6"); dot.setAttribute("stroke","none"); }
+    else { dot.setAttribute("fill","none"); dot.setAttribute("r","8"); dot.setAttribute("stroke","var(--ink2)"); }
+    if(tx) tx.classList.toggle("done", !!done[i]);
+  }
+  var hint = $("#led-hint");
+  if(hint){
+    if(F.f_act1_done) hint.textContent = "差事已畢。校勘記已成 —— 點下面「取閱校勘記」。";
+    else hint.textContent = "房裡沒有題目 —— 只有一櫃舊衣物、兩頁殘紙、一幅塔圖、一枚朱砂印。";
+  }
+  var nb = $("#hs_led_notes");
+  if(nb) nb.classList.toggle("gone", !F.f_act1_done);
+}
+
+/* ── 9c. 校勘記（收束时额外交付；内容全部为已核实原文）────────── */
+function noteEntries(){
+  var out = [];
+  if(F.f_leaf_jia_sealed && F.f_leaf_yi_sealed){
+    out.push({ h:"一 · 《茶經》一書之內，荼、茶兩存",
+      l:["《茶經 · 一之源》小注引郭弘農：「早取爲荼，晚取爲茗，或一曰荈耳。」",
+         "《茶經 · 七之事》引郭璞《爾雅注》：「今呼早取爲茶，晚取爲茗，或一曰荈，蜀人名之苦茶。」",
+         "《爾雅 · 釋木》正文：「檟，苦荼。」",
+         "《爾雅注疏》卷九郭璞注：「今呼早采者為荼，晚取者為茗。一名荈，蜀人名之苦荼。」",
+         "按：所引本書《爾雅》及其注均作「荼」；陸羽《一之源》注作「荼」，而《七之事》引同一注作「茶」。一書之內未統一，兩存。"] });
+  }
+  if(F.f_chain2_done){
+    out.push({ h:"二 · 《釋名 · 卷五》三件名物，依訓釋歸位",
+      l:["帕腹，橫帕其腹也。",
+         "抱腹，上下有帶，抱裹其腹，上無襠者也。",
+         "心衣，抱腹而施鉤肩，鉤肩之間，施一襠以奄心也。",
+         "按：三條連排，遞進即判別 —— 只一橫布者帕腹；有上下帶而上無襠者抱腹；加鉤肩、肩間施襠者心衣。"] });
+  }
+  if(F.f_chain3_done || (F.f_fig_slot_13 && F.f_fig_slot_15)){
+    out.push({ h:"三 · 《洛陽伽藍記》卷五，同段兩套數",
+      l:["道榮云其高三丈，悉用文木為陛階砌櫨拱上搆衆木，凡十三級，上有鐵柱髙三尺，金槃十三重，合去地七百尺。",
+         "道榮云鐵柱八十八尺八十圍，金盤十五重，去地六十三丈二尺。",
+         "按：同出一人之口，前作「金槃十三重 · 七百尺」，後作「金盤十五重 · 六十三丈二尺」（＝六百三十二尺），兩套數不合。槃／盤字形亦異。校書官不判其孰是，兩存而不強合。"] });
+  }
+  if(F.f_side_rubbing_taken || F.f_fig_slot_1000){
+    out.push({ h:"附 · 卷一永寧寺塔（支線 S2）",
+      l:["中有九層浮圖一所，架木為之，舉髙九十丈，有剎復髙十丈，合去地一千尺。",
+         "按：九十丈＋十丈＝一百丈＝一千尺，本卷自洽。然與卷五非同一塔，不可同圖互證。"] });
+  }
+  if(F.f_side_shishuo_read){
+    out.push({ h:"附 · 《茶經 · 七之事》引《世說》（支線 S1）",
+      l:["《茶經》所引：「任瞻，字育長，少時有令名，自過江失志。既下飲，問人云：『此爲茶？爲茗？』覺人有恠色，乃自分明云：『向問飲爲熱爲冷？』」",
+         "《世說新語 · 紕漏》正文：「任育長年少時，甚有令名……一見便覺有異……覺有異色，乃自申明云：『向問飲為熱，為冷耳。』」",
+         "按：引文非逐字照錄 —— 「年少時，甚有令名」被併作「少時有令名」，「覺有異色」改作「覺人有恠色」，「乃自申明」改作「乃自分明」，末句脫一「耳」字。四處異文，兩存。"] });
+  }
+  return out;
+}
+var notePage = 0;
+function showNotes(){ notePage = 0; renderNotePage(); }
+function renderNotePage(){
+  var es = noteEntries();
+  if(!es.length){ say("校勘記還是空的。", false, 2400); return; }
+  if(notePage < 0) notePage = 0;
+  if(notePage > es.length-1) notePage = es.length-1;
+  var e = es[notePage];
+  PAPER_OPEN = "__notes";
+  paperLayer.innerHTML = "";
+  var W = 680, H = 480, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{x:-4,y:-4,width:W+8,height:H+8,rx:4,"class":"shadow"}));
+  g.appendChild(el("path",{ "class":"l1 f-card", rx:2,
+    d:"M2,2.6 C180,1 500,3.2 678,1.6 L678,"+(H-1.6)+" C500,"+(H-3.4)+" 180,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  var t1 = el("text",{ "class":"paper-title", x:W/2, y:50, "text-anchor":"middle" });
+  t1.textContent = "校 勘 記"; g.appendChild(t1);
+  var t2 = el("text",{ "class":"paper-sub", x:W/2, y:76, "text-anchor":"middle" });
+  t2.textContent = "典藏司 校書閣 · 第一幕所校"; g.appendChild(t2);
+  var th = el("text",{ "class":"tx-k", x:40, y:118, "font-size":17 });
+  th.textContent = e.h; g.appendChild(th);
+  var y = 156, i;
+  for(i=0;i<e.l.length;i++){
+    wrap(e.l[i], 38).forEach(function(s){
+      var tt = el("text",{ "class":"tx-k", x:56, y:y, "font-size":14, fill:"var(--ink2)" });
+      tt.textContent = s; g.appendChild(tt); y += 23;
+    });
+  }
+  // 条序（用朱点表示，不写数字、不做进度条）
+  // 未到的页画「墨圈」：用 --ink2（与值房台账的墨圈同一色），不用 --line2 ——
+  // 后者只在 #hud 的边框上用、SVG 里没有别处出现，用在这里会让实机取值变 9 个。
+  var total = es.length, dw = 14;
+  for(i=0;i<total;i++){
+    g.appendChild(el("circle",{ cx:(W/2 - (total-1)*dw/2 + i*dw), cy:H-52, r:4,
+      fill:(i===notePage) ? "var(--zhu)" : "none",
+      stroke:(i===notePage) ? "none" : "var(--ink2)", "stroke-width":1 }));
+  }
+  if(notePage > 0){
+    var pv = el("text",{ "class":"paper-close", x:44, y:H-44, "font-size":15 });
+    pv.textContent = "◂ 前一條"; g.appendChild(pv);
+    var hp = el("rect",{ x:34, y:H-62, width:100, height:32, fill:"transparent" });
+    hp.setAttribute("style","cursor:pointer");
+    hp.addEventListener("click", function(ev){ ev.stopPropagation(); notePage--; renderNotePage(); });
+    g.appendChild(hp);
+  }
+  if(notePage < total-1){
+    var nx = el("text",{ "class":"paper-close", x:W-44, y:H-44, "font-size":15, "text-anchor":"end" });
+    nx.textContent = "後一條 ▸"; g.appendChild(nx);
+    var hn = el("rect",{ x:W-134, y:H-62, width:100, height:32, fill:"transparent" });
+    hn.setAttribute("style","cursor:pointer");
+    hn.addEventListener("click", function(ev){ ev.stopPropagation(); notePage++; renderNotePage(); });
+    g.appendChild(hn);
+  }
+  var cl = el("text",{ "class":"paper-close", x:W/2, y:H-16, "text-anchor":"middle" });
+  cl.textContent = "點紙外任意處 · 收起"; g.appendChild(cl);
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+  try{ localStorage.setItem("diandangsi.rustylake.v1.notes",
+        JSON.stringify({ made:Date.now(), entries:es.length })); }catch(e2){}
+}
+
+/* ── 10. 纸：在场景内展开 ─────────────────────────────────── */
+var PAPER_OPEN = null;
+function wrap(s, n){
+  var out = [], i;
+  for(i=0;i<s.length;i+=n) out.push(s.slice(i,i+n));
+  return out;
+}
+function showPaper(pid){
+  var P = PAPERS[pid]; if(!P) return;
+  PAPER_OPEN = pid;
+  paperLayer.innerHTML = "";
+  var W = 620, H = 466, X = 600-W/2, Y = 360-H/2;
+  var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
+  g.appendChild(el("rect",{x:-4,y:-4,width:W+8,height:H+8,rx:4,"class":"shadow"}));
+  g.appendChild(el("path",{ "class":"l1 f-card", rx:2,
+    d:"M2,2.6 C160,1 460,3.2 618,1.6 L618,"+(H-1.6)+" C460,"+(H-3.4)+" 160,"+(H-0.8)+" 2,"+(H-2.4)+" Z" }));
+  var t1 = el("text",{ "class":"paper-title", x:W/2, y:52, "text-anchor":"middle" });
+  t1.textContent = P.t; g.appendChild(t1);
+  var t2 = el("text",{ "class":"paper-sub", x:W/2, y:78, "text-anchor":"middle" });
+  t2.textContent = P.s; g.appendChild(t2);
+  // 正文：需要玩家读的关键字画真字（关键字 +2px），其余为示意行
+  var y = 128, i, L;
+  for(i=0;i<P.body.length;i++){
+    var lines = wrap(P.body[i], 26);
+    for(var j=0;j<lines.length;j++){
+      var tx = el("text",{ "class":"paper-body"+((P.zhu)?" tx-z":""), x:44, y:y });
+      var seg = lines[j], buf = "", kk;
+      // 关键异文字放大 2px（不加粗、不变色）
+      var marks = [];
+      P.keys.forEach(function(k){ var idx=0,p; while((p=seg.indexOf(k,idx))>=0){ marks.push([p,p+k.length]); idx=p+1; } });
+      marks.sort(function(a,b){return a[0]-b[0];});
+      var cur = 0;
+      marks.forEach(function(m){
+        if(m[0]<cur) return;
+        if(m[0]>cur){ var n1=document.createElementNS("http://www.w3.org/2000/svg","tspan"); n1.textContent=seg.slice(cur,m[0]); tx.appendChild(n1); }
+        var sp=document.createElementNS("http://www.w3.org/2000/svg","tspan"); sp.setAttribute("class","key");
+        sp.textContent = seg.slice(m[0],m[1]); tx.appendChild(sp);
+        cur = m[1];
+      });
+      if(cur < seg.length){ var n2=document.createElementNS("http://www.w3.org/2000/svg","tspan"); n2.textContent=seg.slice(cur); tx.appendChild(n2); }
+      g.appendChild(tx);
+      y += 34;
+    }
+    y += 10;
+  }
+  // 页的其余部分：L3 等距短横线示意（不画真字）
+  for(i=0;i<4 && y<H-60;i++){ g.appendChild(mkPath("l3","M44,"+y+" L"+(W-64)+","+y)); y += 18; }
+  var cl = el("text",{ "class":"paper-close", x:W/2, y:H-18, "text-anchor":"middle" });
+  cl.textContent = "點紙外任意處 · 收起"; g.appendChild(cl);
+  g.addEventListener("click", function(e){ e.stopPropagation(); closePaper(); });
+  paperLayer.appendChild(g);
+}
+function closePaper(){
+  if(!PAPER_OPEN) return;
+  if(READ.indexOf(PAPER_OPEN)<0) READ.push(PAPER_OPEN);
+  PAPER_OPEN = null;
+  paperLayer.innerHTML = "";
+  markRead();
+  saveDebounced();
+}
+function markRead(){
+  if(READ.indexOf("p_erya")>=0) F.f_read_erya_shimu = true;
+  if(READ.indexOf("p_zhushu")>=0) F.f_read_erya_zhushu09 = true;
+  if(READ.indexOf("p_shiming")>=0) F.f_read_shiming5 = true;
+  if(READ.indexOf("p_jia")>=0) F.f_read_tea1 = true;
+  if(READ.indexOf("p_yi")>=0) F.f_read_tea7 = true;
+  if(READ.indexOf("p_shishuo")>=0 && !F.f_side_shishuo_read){
+    F.f_side_shishuo_read = true;
+    say("案頭多出一張殘頁 —— 《茶經 · 七之事》引《世說》那段。", false, 4200);
+  }
+}
+
+/* ── 11. 视图/相机 ────────────────────────────────────────── */
+var VIEWS = { room:"view-room", shelf:"view-shelf", desk:"view-desk",
+              scroll:"view-scroll", right:"view-right" };
+function setCam(v){
+  CAM = v; F.f_camera = v;
+  for(var k in VIEWS) $("#"+VIEWS[k]).classList.toggle("active", k===v);
+  if(v!=="room") closePaperQuiet();
+  applyArmed(); render(); saveDebounced();
+}
+function closePaperQuiet(){ PAPER_OPEN=null; paperLayer.innerHTML=""; }
+function goRoom(){ setCam("room"); }
+
+/* ── 12. 渲染：flags 驱动 class，不另维护坐标表 ───────────────── */
+function render(){
+  renderLedger();
+  // 链① 残页状态
+  ["jia","yi"].forEach(function(w){
+    var g = $("#leaf_"+w);
+    g.classList.toggle("sealed", !!F["f_leaf_"+w+"_sealed"]);
+    g.classList.toggle("smudged", !!F["f_leaf_"+w+"_smudged"]);
+    g.classList.toggle("blotted", !!F["f_leaf_"+w+"_blotted"]);
+  });
+  // 抽屉
+  var d = $("#drawer");
+  d.classList.toggle("open", !!F.f_drawer_open);
+  $("#hs_plaque13").classList.toggle("gone", !!F.f_plaque13_taken || !F.f_drawer_open);
+  $("#hs_plaque15").classList.toggle("gone", !!F.f_plaque15_taken || !F.f_drawer_open);
+  // 吸墨纸（用完即消失，不留空热点）
+  var hb = $("#h_blotter");
+  hb.classList.toggle("gone", (F.f_blot_count|0) <= 0 && !F.f_blot_refilled);
+  // 高柜
+  $("#view-right").classList.toggle("open", !!F.f_cabinet_open);
+  if(F.f_blot_refilled) $("#h_blot_refill").classList.add("gone");
+  // 衣物归位：签上朱砂小点
+  [["a","pafu"],["b","baofu"],["c","xinyi"]].forEach(function(p){
+    var dot = document.querySelector("#tag_"+p[1]+" .placed-dot");
+    if(dot) dot.setAttribute("opacity", F["f_garment_"+p[0]+"_placed"] ? "1" : "0");
+  });
+  // 柜内衣物：已挂走的从柜里消失（热点不留空 —— gone 同时置 pointer-events:none）
+  [["a","hsg_a"],["b","hsg_b"],["c","hsg_c"]].forEach(function(p){
+    var gone = F["f_garment_"+p[0]+"_placed"] || INV.indexOf("it_garment_"+p[0])>=0;
+    var w = document.getElementById(p[1]);
+    if(w){ w.classList.toggle("gone", !!gone); }
+  });
+  // 心衣内衬残纸
+  var lin = $("#lining");
+  lin.classList.toggle("show", !!F.f_chain2_done && !F.f_slip2_taken);
+  if(F.f_slip2_taken) lin.classList.add("gone");
+  // 营造图
+  var fig = $("#fig");
+  fig.classList.toggle("fig13", !!F.f_fig_slot_13_active13);
+  fig.classList.toggle("fig15", !!F.f_fig_slot_15_active15);
+  fig.classList.toggle("fig1000", !!F.f_fig_slot_1000_active1000);
+  fig.classList.toggle("in-slot", !!(F.f_fig_slot_13_active13||F.f_fig_slot_15_active15||F.f_fig_slot_1000_active1000));
+  var lt = $("#layers-text"), ht = $("#height-text");
+  $("#plaque-in-layers").classList.toggle("in-slot", !!(F.f_fig_slot_13_active13||F.f_fig_slot_15_active15));
+  if(F.f_fig_slot_13_active13){ lt.textContent = "金槃十三重"; ht.textContent = "合去地 七百尺"; }
+  else if(F.f_fig_slot_15_active15){ lt.textContent = "金盤十五重"; ht.textContent = "合去地 六十三丈二尺"; }
+  else if(F.f_fig_slot_1000_active1000){ lt.textContent = "九層浮圖"; ht.textContent = "合去地 一千尺"; }
+  else { lt.textContent = ""; ht.textContent = "合去地 七百尺"; }
+  // 暗格
+  $("#secret").classList.toggle("open", !!F.f_secret_open);
+  // 案面永久朱砂点
+  renderDeskDots();
+  // 物品栏
+  renderInv(); applyArmed();
+}
+function renderDeskDots(){
+  var host = $("#desk-dots"); if(!host) return;
+  var n = F.f_desk_dots|0;
+  while(host.childNodes.length < n){
+    var i = host.childNodes.length;
+    /* 案面是水平面（轻斜投影 dy=-0.35·depth）→ 圆点画成压扁的椭圆，不画正圆 */
+    host.appendChild(el("ellipse",{cx:200+i*140, cy:566, rx:5.4, ry:2.4, fill:"var(--zhu)", stroke:"none"}));
+  }
+  while(host.childNodes.length > n) host.removeChild(host.lastChild);
+}
+
+/* ── 13. 可用热点加粗（持有物件时进入近景即加粗）──────────────── */
+var USE = {
+  it_seal_jiao:{ view:["desk"], hs:["h_leaf_jia","h_leaf_yi","h_desktop"] },
+  it_seal_yi:  { view:["desk"], hs:["h_leaf_jia","h_leaf_yi","h_desktop"] },
+  it_blotter:  { view:["desk"], hs:["h_leaf_jia","h_leaf_yi"] },
+  it_plaque_13:{ view:["scroll"], hs:["h_slot_layers","h_slot_height"] },
+  it_plaque_15:{ view:["scroll"], hs:["h_slot_layers","h_slot_height"] },
+  it_garment_a:{ view:["right"], hs:["h_tag_pafu","h_tag_baofu","h_tag_xinyi"] },
+  it_garment_b:{ view:["right"], hs:["h_tag_pafu","h_tag_baofu","h_tag_xinyi"] },
+  it_garment_c:{ view:["right"], hs:["h_tag_pafu","h_tag_baofu","h_tag_xinyi"] },
+  it_rubbing:  { view:["scroll"], hs:["h_scroll_fig"] },
+  it_slip2:    { view:[], hs:[] }
+};
+function applyArmed(){
+  document.querySelectorAll(".hs.armed").forEach(function(n){ n.classList.remove("armed"); });
+  if(!SEL) return;
+  var u = USE[SEL]; if(!u) return;
+  if(u.view.indexOf(CAM)<0) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")) n.classList.add("armed");
+  });
+}
+function bumpBreathe(itemId){
+  var u = USE[itemId]; if(!u) return;
+  u.hs.forEach(function(id){
+    var n = document.querySelector('.hs[data-hs="'+id+'"]');
+    if(n && !n.classList.contains("gone")){
+      n.classList.remove("breathe"); void n.offsetWidth; n.classList.add("breathe");
+      setTimeout(function(){ n.classList.remove("breathe"); }, 2500);
+    }
+  });
+}
+
+/* ── 14. 音效（可选；WebAudio 合成，不引音频文件）──────────────── */
+var AC = null, SND = true;
+function sfx(kind){
+  if(!SND) return;
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    var f = kind==="seal"?80 : kind==="plaque"?200 : kind==="drawer"?90 : 300;
+    o.type = kind==="plaque" ? "square" : "sine";
+    o.frequency.value = f;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(AC.destination);
+    g.gain.exponentialRampToValueAtTime(0.06, t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(kind==="drawer"?0.5:0.22));
+    o.start(t); o.stop(t+(kind==="drawer"?0.52:0.24));
+  }catch(e){}
+}
+$("#snd").addEventListener("click", function(e){
+  e.stopPropagation();
+  SND = !SND;
+  say(SND ? "聲 · 開" : "聲 · 閉", false, 1200);
+  try{ localStorage.setItem("diandangsi.rustylake.settings", JSON.stringify({snd:SND})); }catch(e2){}
+});
+
+/* ── 15. 老掌书：只指方位，不给内容；没有提示按钮 ─────────────── */
+var HINTS = {
+  desk:"你手上那張紙，是從哪一頁撕下來的？",
+  shelf:"這一架上的書，有一本專門講人身上穿的。",
+  scroll:"一張圖上，容不下兩套數。你自己擺擺看。",
+  misplaced:"再翻翻卷五。那三條是連著的。",
+  seal:"所引的本書，架上有。"
+};
+var hintIdx = 0, hintUsed = {}, lastHint = 0;
+function hint(){
+  var now = Date.now();
+  if(now - lastHint < 180000) return;
+  var order;
+  if((F.f_misplaced_count|0) >= 3) order = ["misplaced","scroll","shelf","desk","seal"];
+  else if(CAM==="room" && !F.f_leaf_jia_sealed) order = ["seal","desk","shelf"];
+  else if(CAM==="shelf") order = ["shelf"];
+  else if(CAM==="scroll") order = ["scroll"];
+  else order = ["desk","shelf","scroll","misplaced","seal"];
+  for(var i=0;i<order.length;i++){
+    var k = order[i];
+    if(hintUsed[k]) continue;
+    hintUsed[k] = 1; lastHint = now;
+    say(HINTS[k], false, 4200);
+    return;
+  }
+}
+var idleT = null;
+function pokeIdle(){ clearTimeout(idleT); idleT = setTimeout(hint, 90000); }
+document.addEventListener("mousemove", pokeIdle, {passive:true});
+document.addEventListener("keydown", pokeIdle);
+
+/* ── 16. 热点行为 ─────────────────────────────────────────── */
+var tapCount = {}, flagsAtTap = {};
+function onHotspot(id){
+  if(PAPER_OPEN){ closePaper(); return; }
+  var before = JSON.stringify(F)+SEL+INV.length;
+  tapCount[id] = (tapCount[id]||0)+1;
+  if(tapCount[id] >= 5 && flagsAtTap[id] === before){ hint(); tapCount[id] = 0; }
+  if(tapCount[id] === 1) flagsAtTap[id] = before;
+  else if(flagsAtTap[id] !== before){ tapCount[id] = 1; flagsAtTap[id] = before; }
+  pokeIdle();
+  ACT[id] && ACT[id]();
+}
+var ACT = {
+  h_ledger_enter: function(){
+    if(F.f_act1_done){ showLedger(false); say("閣裡還亮著燈。", false, 2400); return; }
+    showLedger(false);
+    if(!F.f_seen_room){ say("案上這一部殘書，校完就能回去睡了。", false, 3600); F.f_seen_room = true; saveDebounced(); }
+  },
+  h_ledger_notes: function(){ showNotes(); },
+  h_shelf: function(){ F.f_shelf_opened = true; setCam("shelf");
+    say("四層架 · 頂層一只落灰木匣。", false, 2400); },
+  h_window: function(){
+    if(!F.f_side_window){ F.f_side_window = true;
+      say("院裡那株，今年開得早。", false, 3200); }
+    else say("窗外一枝早開的樹。", false, 2000);
+    saveDebounced(); },
+  h_rule: function(){ showPaper("p_rule"); },
+  h_desk: function(){ setCam("desk"); },
+  h_scroll: function(){ setCam("scroll"); },
+  h_wall: function(){ setCam("right"); },
+  h_cabinet: function(){ setCam("right"); if(!F.f_cabinet_open) setTimeout(openCabinet, 260); },
+  h_cabinet_inside: function(){ if(!F.f_cabinet_open) openCabinet(); },
+
+  h_tag_ly1: function(){ showPaper("p_ly1"); },
+  h_tag_erya: function(){ showPaper("p_erya"); },
+  h_tag_zhushu: function(){ showPaper("p_zhushu"); },
+  h_tag_shiming: function(){ showPaper("p_shiming"); },
+  h_tag_shishuo: function(){ showPaper("p_shishuo"); },
+  h_tag_ly5: function(){ showPaper("p_ly5"); },
+  h_box: function(){
+    if(!F.f_side_rubbing_taken){ F.f_side_rubbing_taken = true; give("it_rubbing");
+      say("匣中一方舊拓 —— 卷一永寧寺塔。", false, 3000); }
+    else showPaper("p_ly1");
+    saveDebounced(); },
+  h_blot_refill: function(){
+    if(F.f_blot_refilled) return;
+    F.f_blot_refilled = true; F.f_blot_count = 2;
+    say("底層還有一疊吸墨紙。", false, 2600); saveDebounced(); render(); },
+
+  h_leaf_jia: function(){
+    if(SEL === "it_blotter"){ blot("jia"); return; }
+    if(SEL === "it_seal_jiao"){ applySeal("jia","jiao"); return; }
+    if(SEL === "it_seal_yi"){ applySeal("jia","yi"); return; }
+    if(F.f_leaf_jia_smudged){ showPaper("p_jia"); return; }
+    showPaper("p_jia"); },
+  h_leaf_yi: function(){
+    if(SEL === "it_blotter"){ blot("yi"); return; }
+    if(SEL === "it_seal_jiao"){ applySeal("yi","jiao"); return; }
+    if(SEL === "it_seal_yi"){ applySeal("yi","yi"); return; }
+    showPaper("p_yi"); },
+  h_desktop: function(){
+    if(SEL === "it_seal_jiao" || SEL === "it_seal_yi"){
+      F.f_desk_dots = (F.f_desk_dots|0)+1; sfx("seal");
+      say("案面留下一個朱砂點。", false, 2200); saveDebounced(); render();
+      return; }
+    say("案上：殘頁甲乙、印盒、兩枚印、一疊吸墨紙。", false, 2600); },
+
+  h_cinnabar: function(){ say("印盒半開，盒裡一小塊朱砂。", false, 2200); },
+  h_seal_jiao: function(){
+    if(INV.indexOf("it_seal_jiao")<0){ give("it_seal_jiao"); sfx("plaque");
+      say("「校」印入手 —— 凡與所引本書合者，用「校」。", false, 3000); saveDebounced(); }
+    else SEL = (SEL==="it_seal_jiao") ? null : "it_seal_jiao", renderInv(), applyArmed(); },
+  h_seal_yi: function(){
+    if(INV.indexOf("it_seal_yi")<0){ give("it_seal_yi"); sfx("plaque");
+      say("「異」印入手 —— 字有增改者，用「異」。", false, 3000); saveDebounced(); }
+    else SEL = (SEL==="it_seal_yi") ? null : "it_seal_yi", renderInv(), applyArmed(); },
+  h_blotter: function(){
+    if((F.f_blot_count|0) <= 0 && !F.f_blot_refilled){ say("案上的吸墨紙已經用盡。", false, 2400); return; }
+    if(INV.indexOf("it_blotter")<0 && (F.f_blot_count|0) > 0){ give("it_blotter");
+      say("取一張吸墨紙。", false, 2000); saveDebounced(); }
+    else SEL = (SEL==="it_blotter") ? null : "it_blotter", renderInv(), applyArmed(); },
+
+  h_drawer: function(){
+    if(!F.f_drawer_open){ say("抽屜還閉著，只看得見一條縫。", false, 2400); return; }
+    say("抽屜裡躺著兩塊木牌。", false, 2200); },
+  h_plaque13: function(){
+    if(F.f_plaque13_taken) return;
+    F.f_plaque13_taken = true; give("it_plaque_13"); sfx("plaque");
+    say("「金槃十三重」—— 注意這個「槃」字。", false, 3000);
+    saveDebounced(); render(); },
+  h_plaque15: function(){
+    if(F.f_plaque15_taken) return;
+    F.f_plaque15_taken = true; give("it_plaque_15"); sfx("plaque");
+    say("「金盤十五重」—— 這個是「盤」。", false, 3000);
+    saveDebounced(); render(); },
+
+  h_tag_pafu: function(){ hangSelected("pafu"); },
+  h_tag_baofu: function(){ hangSelected("baofu"); },
+  h_tag_xinyi: function(){ hangSelected("xinyi"); },
+  h_garment_a: function(){ pickGarment("a"); },
+  h_garment_b: function(){ pickGarment("b"); },
+  h_garment_c: function(){ pickGarment("c"); },
+  h_lining_slip: function(){
+    if(!F.f_chain2_done || F.f_slip2_taken) return;
+    F.f_slip2_taken = true; give("it_slip2");
+    say("半段殘紙 —— 上面是另一套數。", false, 3200);
+    saveDebounced(); render(); showPaper("p_slip2"); },
+
+  h_slot_layers: function(){
+    if(!SEL || (SEL!=="it_plaque_13" && SEL!=="it_plaque_15")){
+      if(F.f_fig_slot_13_active13){ pullPlaque(); return; }
+      if(F.f_fig_slot_15_active15){ pullPlaque(); return; }
+      say("凹槽空著，邊上刻著「金槃十三重」。", false, 2600); return; }
+    if(SEL === "it_plaque_13"){
+      if(F.f_fig_slot_13_active13) return;
+      F.f_fig_slot_13_active13 = true; F.f_fig_slot_15_active15 = false;
+      F.f_fig_slot_1000_active1000 = false;
+      if(!F.f_fig_slot_13){ F.f_fig_slot_13 = true; }
+      sfx("plaque"); say("鐵柱縮為三尺 —— 塔尖正好抵住尺標頂端。", false, 3600);
+    } else {
+      if(F.f_fig_slot_15_active15) return;
+      F.f_fig_slot_15_active15 = true; F.f_fig_slot_13_active13 = false;
+      F.f_fig_slot_1000_active1000 = false;
+      if(!F.f_fig_slot_15){ F.f_fig_slot_15 = true; }
+      sfx("plaque"); say("鐵柱漲為八十八尺 —— 塔尖離尺標頂還差一截。", false, 3600);
+    }
+    takeAway(SEL);
+    checkChain3(); saveDebounced(); render(); },
+  h_slot_height: function(){
+    if(SEL === "it_plaque_13" || SEL === "it_plaque_15"){
+      sfx("plaque"); say("這一道槽不嵌木牌 —— 它自己會顯數。", false, 3000); return; }
+    say("尺標底槽：「合去地 七百尺」—— 塔一變，數跟著變。", false, 2400); },
+  h_scroll_fig: function(){
+    if(SEL === "it_rubbing"){
+      F.f_fig_slot_1000_active1000 = true;
+      F.f_fig_slot_13_active13 = false; F.f_fig_slot_15_active15 = false;
+      if(!F.f_fig_slot_1000) F.f_fig_slot_1000 = true;
+      sfx("plaque"); say("塔尖遠高於尺標頂 —— 頂出圖框了。", false, 3600);
+      checkChain3(); saveDebounced(); render(); } },
+  h_secret: function(){
+    if(!F.f_secret_open){ say("尺標底座，素面木托。", false, 2200); return; }
+    if(F.f_vol10_taken){ say("暗格空著。", false, 1800); return; }
+    F.f_vol10_taken = true; give("it_vol10");
+    sfx("plaque"); saveDebounced(); render();
+    F.f_act1_done = true; saveDebounced();
+    say("今日校畢：三事。", false, 2500);
+  }
+};
+function pullPlaque(){
+  if(F.f_fig_slot_13_active13){ F.f_fig_slot_13_active13=false; give("it_plaque_13"); }
+  if(F.f_fig_slot_15_active15){ F.f_fig_slot_15_active15=false; give("it_plaque_15"); }
+  sfx("plaque"); render(); saveDebounced();
+}
+function openCabinet(){
+  F.f_cabinet_open = true; sfx("drawer");
+  say("櫃門開了 —— 三件舊衣物平攤在三格板上。", false, 3400);
+  saveDebounced(); render();
+}
+function applySeal(which, seal){
+  var right = (which==="jia" && seal==="jiao") || (which==="yi" && seal==="yi");
+  if(right){
+    F["f_leaf_"+which+"_sealed"] = true;
+    F["f_leaf_"+which+"_smudged"] = false;
+    F["f_leaf_"+which+"_blotted"] = false;
+    sfx("seal"); render();
+    if(F.f_leaf_jia_sealed && F.f_leaf_yi_sealed){
+      F.f_chain1_done = true; F.f_drawer_open = true;
+      setTimeout(function(){
+        F.f_chain1_done = F.f_drawer_open = true;
+        sfx("drawer"); render();
+        $(".flick") && 0;
+        var c = $("#candle-halo"); if(c){ c.classList.remove("flick"); void c.offsetWidth; c.classList.add("flick"); }
+        say("書案抽屜「咔」一聲，沿導軌滑出。", false, 3600);
+      }, 420);
+      saveDebounced();
+    }
+  } else {
+    F["f_leaf_"+which+"_smudged"] = true;
+    F["f_leaf_"+which+"_sealed"] = false;
+    if((F.f_blot_count|0) > 0) F.f_blot_count = (F.f_blot_count|0) - 1;
+    sfx("seal");
+    // 语法：现场变化（朱砂洇开）+ 一句只指方位的话（不做任何对错判断）
+    say("朱砂在紙上洇開 —— 這一頁的字，是後人改過的。", false, 4000);
+  }
+  SEL = null; saveDebounced(); render();
+}
+function blot(which){
+  if(!F["f_leaf_"+which+"_smudged"]){ say("這頁沒有污。", false, 1800); return; }
+  F["f_leaf_"+which+"_smudged"] = false;
+  F["f_leaf_"+which+"_blotted"] = true;
+  F.f_cloth_used = true;
+  takeAway("it_blotter");
+  sfx("cloth"); say("污斑淡去，紙上留一道極淡的痕。", false, 3000);
+  saveDebounced(); render();
+}
+var PLACE = { a:"pafu", b:"baofu", c:"xinyi" };
+function pickGarment(g){
+  if(!F.f_cabinet_open){ openCabinet(); return; }
+  var id = "it_garment_"+g;
+  if(F["f_garment_"+g+"_placed"]) return;
+  if(INV.indexOf(id)<0){ give(id); sfx("cloth"); }
+  SEL = id; renderInv(); applyArmed(); bumpBreathe(id);
+  say("取下一件 —— 掛到牆上對應的木簽下。", false, 2600);
+  saveDebounced(); render();
+}
+function hangSelected(tag){
+  if(!SEL || SEL.indexOf("it_garment_")!==0){
+    say("簽下有一枚銅釘，空著。", false, 2200); return;
+  }
+  hang(SEL.slice(-1), tag);
+}
+function hang(g, tag){
+  var want = PLACE[g];
+  if(want === tag){
+    F["f_garment_"+g+"_placed"] = true;
+    takeAway("it_garment_"+g);
+    var tg = $("#tag_"+tag);
+    tg.classList.remove("tagshake"); void tg.offsetWidth; tg.classList.add("tagshake");
+    sfx("cloth"); say("掛上了。簽上浮出一個極小的朱砂點。", false, 2600);
+    if(F.f_garment_a_placed && F.f_garment_b_placed && F.f_garment_c_placed){
+      F.f_chain2_done = true;
+      say("心衣平攤圖的內襯接縫處，露出一角紙頭。", false, 4000);
+    }
+    saveDebounced(); render();
+  } else {
+    slideBack(g, tag);
+    F.f_misplaced_count = (F.f_misplaced_count|0) + 1;
+    sfx("cloth"); saveDebounced();
+    // 语法：现场变化（衣物滑回柜中）+ 一句方位话
+    say("衣物順著牆面滑回櫃中 —— 它不該掛這兒。", false, 3600);
+    if((F.f_misplaced_count|0) >= 3) setTimeout(function(){
+      var p = el("circle",{cx:760, cy:250, r:9, fill:"var(--zhu)", stroke:"none", opacity:".12"});
+      var host = document.querySelector("#view-right .cab-inner"); if(host) host.appendChild(p);
+    }, 700);
+  }
+}
+function slideBack(g, tag){
+  var host = document.querySelector("#view-right");
+  var tagEl = document.getElementById("tag_"+tag);
+  var target = document.getElementById("scene_g_"+g);
+  if(!host || !tagEl || !target) return;
+  var b = G[g].box;
+  var tb, db;
+  try{ tb = tagEl.getBBox(); db = target.getBBox(); }catch(e){ return; }
+  if(!tb || !db || !tb.width) return;
+  var use = el("use", { href:"#sym_g_"+g,
+    x:(tb.x + tb.width/2 - b[2]/2).toFixed(1),
+    y:(tb.y + tb.height/2 - b[3]/2).toFixed(1),
+    width:b[2], height:b[3] });
+  var node = el("g", { "class":"sliding" });
+  node.appendChild(use);
+  node.style.setProperty("--dx", ((db.x+db.width/2) - (tb.x+tb.width/2)).toFixed(1) + "px");
+  node.style.setProperty("--dy", ((db.y+db.height/2) - (tb.y+tb.height/2)).toFixed(1) + "px");
+  host.appendChild(node);
+  setTimeout(function(){ if(node.parentNode) node.parentNode.removeChild(node); }, 640);
+}
+function checkChain3(){
+  if(F.f_fig_slot_13 && F.f_fig_slot_15 && !F.f_chain3_done){
+    F.f_chain3_done = true; F.f_secret_open = true;
+    setTimeout(function(){
+      F.f_secret_open = true; sfx("drawer"); render();
+      say("尺標底座「嗒」一聲，彈開一條縫。", false, 3600);
+    }, 620);
+  }
+}
+
+/* ── 17. 事件绑定 ─────────────────────────────────────────── */
+/* 判序（模板附录 A.5 坑 24）：热点 → 纸 → 台账 → 回主视图。
+   **纸排在台账之前**：台账开着时点开《校勘记》，再点纸要能收掉 —— 旧判序是
+   `if(LEDGER) return;` 先返回，真人只能按 Esc 才退得出那一页。
+   `#paper-layer` 本就画在 `#ledger` 之后（纸确实在上面），所以判序与层序一致。 */
+stage.addEventListener("click", function(e){
+  var hs = e.target.closest ? e.target.closest(".hs") : null;
+  if(hs && hs.dataset.hs && !hs.classList.contains("gone")){ onHotspot(hs.dataset.hs); return; }
+  if(PAPER_OPEN){ closePaper(); return; }   /* 纸在台账之前 */
+  if(LEDGER) return;                        /* 台账开着时不穿透到房间 */
+  if(CAM !== "room") goRoom();
+});
+$("#bk").addEventListener("click", function(e){ e.stopPropagation(); showLedger(true); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){
+    if(LEDGER){ showLedger(false); return; }
+    if(PAPER_OPEN) closePaper(); else if(CAM!=="room") goRoom();
+  }
+  var k = (e.key||"").toLowerCase();
+  if(k==="b") showLedger(!LEDGER);
+  if(k==="1") setCam("room"); if(k==="2") setCam("desk");
+  if(k==="3") setCam("shelf"); if(k==="4") setCam("right"); if(k==="5") setCam("scroll");
+});
+
+/* ── 18. 启动 ─────────────────────────────────────────────── */
+function boot(){
+  buildSymbols(); injectGarments(); buildTower();
+  var restored = false;
+  var AUTO = (location.hash.match(/auto=([a-z0-9]+)/i)||[])[1];
+  var FRESH = /fresh/.test(location.hash);
+  if(AUTO || FRESH){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} resetState(); }
+  else restored = load();
+  if(!restored) resetState();
+  F.f_seen_room = true;
+  render();
+  setCam(CAM || "room");
+  syncModal();          /* 起手 #ledger 就是 class="on"，这里必须主动挂 .modal（附录 A.4） */
+  if(AUTO){ showLedger(true); renderLedger(); }
+  /* 截图探针（仅 ?probe= 时生效，且强制先进台账）：把某个世界变化状态
+     直接摆好并关掉台账，供无头浏览器在首帧就拍到目标画面。
+     只摆 flags 与相机，不跳过任何交互分支（自动走通仍走 runAuto） */
+  var PROBE = (location.search.match(/[?&]probe=([a-z0-9]+)/i)||[])[1];
+  /* 截图用 ?still=1：把 CSS 过渡时长归零，让「世界变化」在首帧就停在终点。
+     只影响动画时长（呈现层），不碰任何 flag 与交互逻辑 */
+  if(/[?&]still=1/.test(location.search)){
+    var st = document.createElement("style");
+    st.textContent = "*{transition-duration:0s!important;animation-delay:0s!important}";
+    document.head.appendChild(st);
+  }
+  function showRoom(){ showLedger(false); F.f_seen_room = true; setCam("room"); render(); }
+  if(PROBE){
+    if(PROBE === "room"){ showRoom(); }
+    else if(PROBE === "desk"){ showRoom(); setCam("desk"); }
+    else if(PROBE === "shelf"){ showRoom(); setCam("shelf"); }
+    else if(PROBE === "scroll"){ showRoom(); setCam("scroll"); }
+    else if(PROBE === "right"){ showRoom(); setCam("right"); F.f_cabinet_open = true; render(); }
+    else if(PROBE === "drawer"){
+      F.f_leaf_jia_sealed = F.f_leaf_yi_sealed = true;
+      F.f_chain1_done = F.f_drawer_open = true;
+      showRoom();
+    }
+    else if(PROBE === "cabinet"){ F.f_cabinet_open = true; showRoom(); setCam("right"); }
+    else if(PROBE === "secret"){
+      F.f_fig_slot_13 = F.f_fig_slot_15 = F.f_chain3_done = F.f_secret_open = true;
+      F.f_fig_slot_13_active13 = F.f_fig_slot_15_active15 = true;
+      showRoom(); setCam("scroll");
+    }
+    else if(PROBE === "end"){
+      F.f_leaf_jia_sealed = F.f_leaf_yi_sealed = true;
+      F.f_chain1_done = F.f_drawer_open = true;
+      F.f_plaque13_taken = F.f_plaque15_taken = true;
+      F.f_cabinet_open = true; F.f_chain2_done = true; F.f_slip2_taken = true;
+      F.f_garment_a_placed = F.f_garment_b_placed = F.f_garment_c_placed = true;
+      F.f_fig_slot_13 = F.f_fig_slot_15 = F.f_fig_slot_1000 = true;
+      F.f_fig_slot_13_active13 = F.f_fig_slot_15_active15 = true;
+      F.f_chain3_done = F.f_secret_open = F.f_vol10_taken = F.f_act1_done = true;
+      F.f_desk_dots = 2;
+      showRoom();
+    }
+  }
+  requestAnimationFrame(function(){
+    $("#boot").classList.add("gone");
+    world.classList.add("intro");
+    setTimeout(function(){ world.classList.remove("intro"); }, 3200);
+  });
+  pokeIdle();
+  if(AUTO) runAuto(AUTO);
+  else if(restored) say("接著上次的地方。", false, 2400);
+}
+/* ── 19. 旧自测入口（**只作脚本自检，不是命中证据**）────────────
+   下面 `click()` 走的是 `hit.dispatchEvent(new MouseEvent("click"))`：事件被
+   直接递给调用者已经选好的元素，**完全绕开浏览器的命中判定**，所以它能报
+   「全过」而真人点不动（模板附录 A.5 坑 21）。保留它是为了不破坏既有 `#auto=`
+   的留痕，**验收一律以 `_selftest\_fix1\walk1.js`（CDP 真鼠标在视口坐标上点）为准**。 */
+function click(hsId){
+  var n = document.querySelector('.hs[data-hs="'+hsId+'"]');
+  if(!n) return false;
+  var hit = n.querySelector(".hit") || n;
+  hit.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return true;
+}
+function w(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function slotOf(itemId){
+  var i = INV.indexOf(itemId); if(i<0) return null;
+  return document.querySelector('.slot[data-slot="'+i+'"]');
+}
+function pickSlot(itemId){
+  var s = slotOf(itemId); if(!s) return false;
+  s.dispatchEvent(new MouseEvent("click", {bubbles:true, cancelable:true}));
+  return SEL === itemId;
+}
+/* 完整主路径，全部用真实 click 事件走一遍（不是直接改 flags） */
+async function runAuto(stop){
+  var log = [];
+  function step(name, ok){ log.push(name + "=" + (ok ? "ok" : "MISS")); }
+  function report(){
+    document.title = "SELFTEST::" + log.join(" | ")
+      + " || FLAGS[" + FLAG_KEYS.filter(function(k){ return F[k]; }).join(",") + "]"
+      + " || blot=" + F.f_blot_count + " misplaced=" + F.f_misplaced_count
+      + " || INV[" + INV.join(",") + "] || CAM=" + CAM
+      + " || READ[" + READ.join(",") + "]";
+    document.body.setAttribute("data-selftest", log.join(" | "));
+  }
+  try{
+    if(stop === "ledger"){ step("停在值房台賬", LEDGER); report(); return; }
+    if(stop === "room"){ step("推門入閣", click("h_ledger_enter")); await w(300); report(); return; }
+    step("0_自台账入閣", click("h_ledger_enter")); await w(420);
+    // ── 链① 校勘 · 荼与茶 ────────────────────────────────
+    step("1_進案頭", click("h_desk")); await w(420);
+    step("2_讀殘頁甲", click("h_leaf_jia")); await w(300);
+    if(stop === "paperjia"){ step("停在殘頁甲", !!PAPER_OPEN); report(); return; }
+    closePaper(); await w(150);
+    step("3_讀殘頁乙", click("h_leaf_yi")); await w(300); closePaper(); await w(150);
+    goRoom(); await w(150);
+    step("4_讀體例紙條", click("h_rule")); await w(300); closePaper(); await w(150);
+    step("5_進書架", click("h_shelf")); await w(380);
+    step("6_讀爾雅釋木", click("h_tag_erya")); await w(280); closePaper(); await w(120);
+    step("7_讀爾雅注疏", click("h_tag_zhushu")); await w(280); closePaper(); await w(120);
+    step("8_讀釋名卷五", click("h_tag_shiming")); await w(280); closePaper(); await w(120);
+    step("9_支線S1讀世說", click("h_tag_shishuo")); await w(280); closePaper(); await w(120);
+    step("10_支線S2取舊拓", click("h_box")); await w(200);
+    goRoom(); await w(150);
+    step("11_回案頭", click("h_desk")); await w(380);
+    step("12_取校印", click("h_seal_jiao")); await w(150);
+    step("13_選中校印", pickSlot("it_seal_jiao")); await w(150);
+    step("14_甲頁落校印", click("h_leaf_jia")); await w(320);
+    SEL = null; applyArmed(); render(); await w(120);
+    step("15_取異印", click("h_seal_yi")); await w(150);
+    step("16_選中異印", pickSlot("it_seal_yi")); await w(150);
+    step("17_乙頁落異印", click("h_leaf_yi")); await w(320);
+    SEL = null; applyArmed(); render(); await w(1100);
+    step("18_鏈①通_抽屜開", F.f_drawer_open);
+    if(stop === "drawer"){ report(); return; }
+    step("19_取木牌十三", click("h_plaque13")); await w(200);
+    step("20_取木牌十五", click("h_plaque15")); await w(200);
+    goRoom(); await w(200);
+
+    // ── 链② 名物归位 ────────────────────────────────────
+    step("21_開高櫃", click("h_cabinet")); await w(1200);
+    if(stop === "cabinet"){ step("停在櫃內近景", F.f_cabinet_open); report(); return; }
+    var seq = [["c","h_tag_xinyi"],["a","h_tag_pafu"],["b","h_tag_baofu"]];
+    for(var i=0;i<seq.length;i++){
+      var g = seq[i][0], tag = seq[i][1];
+      step("22_取衣物"+g, click("h_garment_"+g)); await w(180);
+      step("23_掛"+g, click(tag)); await w(500);
+    }
+    await w(600);
+    step("24_鏈②通_內襯殘紙現", F.f_chain2_done);
+    step("25_取內襯殘紙", click("h_lining_slip")); await w(420); closePaper(); await w(150);
+    goRoom(); await w(200);
+
+    // ── 链③ 卷内矛盾 ────────────────────────────────────
+    step("26_進營造圖", click("h_scroll")); await w(380);
+    step("27_選十三重", pickSlot("it_plaque_13")); await w(150);
+    step("28_嵌十三重", click("h_slot_layers")); await w(1000);
+    step("29_驗第一說", F.f_fig_slot_13);
+    if(stop === "fig13"){ /* 停在第一说 */ }
+    else{
+      step("30_取下木牌", click("h_slot_layers")); await w(320);
+      step("31_選十五重", pickSlot("it_plaque_15")); await w(150);
+      step("32_嵌十五重", click("h_slot_layers")); await w(1000);
+      step("33_驗第二說", F.f_fig_slot_15);
+      await w(600);
+      step("34_暗格彈開", F.f_secret_open);
+      if(stop === "secret"){ report(); return; }
+      step("35_取第十卷", click("h_secret")); await w(600);
+      step("36_一幕收束", F.f_act1_done);
+      if(stop === "vol10"){ report(); return; }
+      // 收束：回台账 → 取阅《校勘记》
+      step("36b_回台账", (function(){ showLedger(true); renderLedger(); return LEDGER; })()); await w(300);
+      step("36c_校勘記", (function(){ click("h_ledger_notes"); return PAPER_OPEN === "__notes"; })()); await w(400);
+      if(stop === "notes"){ report(); return; }
+      closePaper(); await w(200);
+      step("36d_再入閣", click("h_ledger_enter")); await w(300);
+      step("36e_進營造圖", click("h_scroll")); await w(320);
+      // 支線 S2：卷一舊拓試擺一千尺
+      step("37_選舊拓", pickSlot("it_rubbing")); await w(150);
+      step("38_試擺一千尺", click("h_scroll_fig")); await w(1000);
+      step("39_第三說已驗", F.f_fig_slot_1000);
+    }
+  }catch(err){ log.push("ERR=" + (err && err.message)); }
+  report();
+}
+
+window.__dd = { F:function(){return F;}, INV:function(){return INV;},
+  CAM:function(){return CAM;}, click:click, setCam:setCam, state:function(){ return {F:F,INV:INV,CAM:CAM,SEL:SEL}; } };
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();
+})();
+</script>
+</body>
+</html>
