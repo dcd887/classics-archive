@@ -73,6 +73,17 @@
   .splitwrap svg{display:block;width:100%;height:auto;background:var(--card)}
   .splitwrap figcaption{font-size:12px;color:var(--ink2);text-align:center;padding-top:5px;line-height:1.6}
   @media(max-width:720px){.labels,.splitwrap{grid-template-columns:1fr}}
+
+  /* v0.20.13 手机端可读性：1200x720 舞台等比缩放后字太小，竖屏时给一条提示（不改玩法） */
+  @media (max-width: 760px) and (orientation: portrait) {
+    body::before {
+      content: "建议横屏或使用电脑游玩，字体更清晰";
+      position: fixed; left: 0; right: 0; top: 0; z-index: 9999;
+      padding: 6px 8px; text-align: center;
+      background: #a63a2a; color: #f3ecdf; font-size: 12px; letter-spacing: .04em;
+    }
+    body { padding-top: 26px; }
+  }
 </style>
 </head>
 <body>
