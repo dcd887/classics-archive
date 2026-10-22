@@ -207,6 +207,17 @@
     body::after{ animation:none; }          /* 装饰性的"烛火"呼吸直接关掉 */
     .fb.right{ animation:fade .25s ease; }  /* 短反馈保留，去掉"落墨"的模糊过程 */
   }
+
+  /* v0.20.13 手机端可读性：1200x720 舞台等比缩放后字太小，竖屏时给一条提示（不改玩法） */
+  @media (max-width: 760px) and (orientation: portrait) {
+    body::before {
+      content: "建议横屏或使用电脑游玩，字体更清晰";
+      position: fixed; left: 0; right: 0; top: 0; z-index: 9999;
+      padding: 6px 8px; text-align: center;
+      background: #a63a2a; color: #f3ecdf; font-size: 12px; letter-spacing: .04em;
+    }
+    body { padding-top: 26px; }
+  }
 </style>
 </head>
 <body>
