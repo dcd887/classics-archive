@@ -182,6 +182,17 @@
   #boot{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;
         justify-content:center;font-size:15px;color:var(--ink2);letter-spacing:.3em;z-index:9}
   #boot.gone{display:none}
+
+  /* v0.20.13 手机端可读性：1200x720 舞台等比缩放后字太小，竖屏时给一条提示（不改玩法） */
+  @media (max-width: 760px) and (orientation: portrait) {
+    body::before {
+      content: "建议横屏或使用电脑游玩，字体更清晰";
+      position: fixed; left: 0; right: 0; top: 0; z-index: 9999;
+      padding: 6px 8px; text-align: center;
+      background: #a63a2a; color: #f3ecdf; font-size: 12px; letter-spacing: .04em;
+    }
+    body { padding-top: 26px; }
+  }
 </style>
 </head>
 <body>
