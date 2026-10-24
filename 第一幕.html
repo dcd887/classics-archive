@@ -1734,8 +1734,8 @@ var ACT = {
     if(!F.f_secret_open){ say("尺標底座，素面木托。", false, 2200); return; }
     if(F.f_vol10_taken){ say("暗格空著。", false, 1800); return; }
     F.f_vol10_taken = true; give("it_vol10");
+    F.f_act1_done = true;          /* 先置位再 render，否则校勘记按钮这一帧仍是 .gone */
     sfx("plaque"); saveDebounced(); render();
-    F.f_act1_done = true; saveDebounced();
     say("今日校畢：三事。", false, 2500);
   }
 };
