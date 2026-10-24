@@ -19,6 +19,8 @@
 
 ---
 
+![在线预览](docs/screenshots/preview.png)
+
 ## 如何运行
 
 1. 打开 `index.html`（双击，或用浏览器打开）。
