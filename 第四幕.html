@@ -948,7 +948,7 @@ function showPaper(pid){
   var FKEY = { p_q_a:"f_q_a_read", p_q_b:"f_q_b_read", p_q_c:"f_q_c_read",
                p_rule:"f_rule_read", p_yanshi:"f_book_yanshi_read",
                p_hanshu:"f_book_hanshu_read", p_zheng:"f_tan_read" }[pid];
-  if(FKEY) F[FKEY] = true;
+  if(FKEY){ F[FKEY] = true; saveDebounced(); }   /* 写 flag 后必须落盘，否则刷新即丢“已翻” */
   paperLayer.innerHTML = "";
   var W = 660, H = 468, X = 600-W/2, Y = 360-H/2;
   var g = el("g", { "class":"paper show", transform:"translate("+X+","+Y+")" });
