@@ -834,7 +834,7 @@
   { n: "簏中牌盡",          k: "assert", a: "noinv:it_tag6" },
   { n: "取無名封皮",        k: "hs",     id: "h_cover",         a: "inv:it_cover", w: 260 },
   { n: "封皮歸第十槽",      k: "hs",     id: "h_slot10",        a: "flag:f_slot10_filled", w: 320 },
-  { n: "十槽既滿",          k: "assert", a: "flag:f_slots_full" },
+  { n: "十槽既滿",          k: "assert", a: "flag:f_ten_slots_full" },
   { n: "合蓋",              k: "hs",     id: "h_shut",          a: "flag:f_lid_shut", w: 320 },
   { n: "取銅鎖",            k: "hs",     id: "h_lock",          a: "inv:it_lock", w: 260 },
   { n: "落鎖_合卷",         k: "hs",     id: "h_shut",          a: "flag:f_locked", w: 320 },
