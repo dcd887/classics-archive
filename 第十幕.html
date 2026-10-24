@@ -695,7 +695,7 @@ var FLAG_KEYS = [
   "f_key_taken","f_lid_open",
   "f_slot1_filled","f_slot2_filled","f_slot3_filled","f_slot4_filled","f_slot5_filled",
   "f_slot6_filled","f_slot7_filled","f_slot8_filled","f_slot9_filled","f_slot10_filled",
-  "f_slots_full","f_lid_shut","f_lock_taken","f_locked","f_seal_taken","f_sealed",
+  "f_ten_slots_full","f_lid_shut","f_lock_taken","f_locked","f_seal_taken","f_sealed",
   "f_act10_done"
 ];
 var F = {}, INV = [], READ = [], SEL = null, CAM = "room";
@@ -962,7 +962,7 @@ function showLedger(on){
 }
 function ledgerDone(){
   return [ !!F.f_lid_open,
-           !!F.f_slots_full,
+           !!F.f_ten_slots_full,
            !!F.f_sealed ];
 }
 function renderLedger(){
@@ -1186,7 +1186,7 @@ function noteEntries(){
       l:["庫房最深處那一具樟木箱，箱蓋上着一道銅搭扣；案上取銅匙挑開，蓋掀起，箱底十道空槽現出。",
          "按：這是操作得出來的（取匙、挑扣），不是讀出來的。箱底那十道槽，一槽承一幕之產出。"] });
   }
-  if(F.f_slots_full){
+  if(F.f_ten_slots_full){
     out.push({ h:"三十五 · 十槽歸位：九牌與一卷無名封皮",
       l:["一 · 校書閣（荼 ／ 茶）　二 · 熔銅作（牡 ／ 牝）　三 · 校書堂（遍 ／ 徧）",
          "四 · 書庫走廊（三紙 ／ 三張）　五 · 膳房（勞 ／ 蟧）　六 · 類書庫（因 ／ 同）",
@@ -1291,7 +1291,7 @@ var NUM = ["〇","一","二","三","四","五","六","七","八","九","十"];
 function render(){
   var i;
   /* ① 十槽既滿 —— **由点击链自然成立**，不是脚本直接改 flag */
-  if(allSlotsFilled()) F.f_slots_full = true;
+  if(allSlotsFilled()) F.f_ten_slots_full = true;
   /* ② 樟木箱：掀蓋 / 合蓋 */
   var ch = document.getElementById("chest");
   if(ch){
@@ -1493,7 +1493,7 @@ function useShut(){
     say("手裡還捏着一牌 —— 先把它歸到它那一槽，再論合蓋。", false, 3600);
     return;
   }
-  if(!F.f_slots_full){
+  if(!F.f_ten_slots_full){
     /* 錯法四：十槽未滿就合蓋 —— 現場變化（抖）+ 一句方位话，可立即重放 */
     bump("h_shut");
     say("十道槽還沒有都歸位 —— 蓋合不上。空着的槽把蓋頂着。", false, 4400);
@@ -1565,7 +1565,7 @@ function hint(){
   var order;
   if(!F.f_lid_open) order = ["latch","key","wall"];
   else if(CAM !== "close") order = ["go","wall","basket"];
-  else if(!F.f_slots_full) order = ["basket","slots","wall","cover"];
+  else if(!F.f_ten_slots_full) order = ["basket","slots","wall","cover"];
   else if(!F.f_sealed) order = ["lockseal","slots"];
   else order = ["slots","wall"];
   for(var i=0;i<order.length;i++){
@@ -1778,7 +1778,7 @@ async function runAuto(stop){
     /* ── 第十槽：箱子夾層裡那一卷無名封皮 ─────────────────────── */
     step("39_取無名封皮", (function(){ click("h_cover"); return SEL === "it_cover"; })()); await w(187);
     step("40_封皮歸第十槽", (function(){ click("h_slot10"); return !!F.f_slot10_filled; })()); await w(242);
-    step("41_十槽既滿", !!(F.f_slots_full && allSlotsFilled()));
+    step("41_十槽既滿", !!(F.f_ten_slots_full && allSlotsFilled()));
     /* ── 合卷：合蓋 → 落鎖 → 落印 ──────────────────────────────── */
     step("42_合蓋", (function(){ click("h_shut"); return !!F.f_lid_shut; })()); await w(242);
     step("43_取銅鎖", (function(){ click("h_lock"); return SEL === "it_lock"; })()); await w(187);
